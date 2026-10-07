@@ -13,6 +13,7 @@ ahead of the read position, so it has one hop to finish.
 */
 
 #include <Bela.h>
+#include <libraries/Scope/Scope.h>
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -33,6 +34,7 @@ static constexpr unsigned int kBufMask = kBufSize - 1;
 
 static Stamp gStamp;
 static Panel gPanel;
+static Scope gScope; // in L, in R, out L, out R
 static AuxiliaryTask gStampTask;
 
 // written by the audio thread, read by the task
@@ -154,6 +156,7 @@ bool setup(BelaContext* context, void* userData)
 	defaults[0] = {{ 0.5f, 0.5f, 0.7f, 0.33f, 0.f, 0.f, 0.f, 0.5f }};
 	defaults[1] = {{ 0.5f, 0.f, 0.3f, 0.33f, 0.f, 0.3f, 0.f, 0.f }};
 	gPanel.setup(context, defaults);
+	gScope.setup(4, context->audioSampleRate);
 
 	if((gStampTask = Bela_createAuxiliaryTask(stampTask, 90, "refft-stamp")) == 0)
 		return false;
@@ -264,10 +267,13 @@ void render(BelaContext* context, void* userData)
 		float mix = dry * dryGain + wet * wetGain;
 		mix = mix * (1.f - gBypassGain) + dry * gBypassGain;
 		float wetOut = wet * (1.f - gBypassGain);
-		audioWrite(context, n, 0, mix * outGain);
-		audioWrite(context, n, 1, wetOut * outGain);
-		meter(kMeterOutL, mix * outGain);
-		meter(kMeterOutR, wetOut * outGain);
+		const float outL = mix * outGain;
+		const float outR = wetOut * outGain;
+		audioWrite(context, n, 0, outL);
+		audioWrite(context, n, 1, outR);
+		meter(kMeterOutL, outL);
+		meter(kMeterOutR, outR);
+		gScope.log(rawDrone, rawField, outL, outR);
 		gWetEnv += envCoef * (fabsf(wetOut) - gWetEnv);
 	}
 
