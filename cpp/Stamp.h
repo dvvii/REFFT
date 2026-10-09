@@ -14,20 +14,29 @@ struct StampParams {
 	float floorOnly = 0.f;    // 0: stamp every bin, 1: stamp only the carrier's noise floor
 	float eventDb = 12.f;     // how far above the tracked floor a bin counts as an event
 	float floorRiseDb = 6.f;  // floor tracker rise speed, dB per second
+	float eventLoHz = 2000.f; // only bins in this band count as events (half-octave
+	float eventHiHz = 10000.f; // tapers outside): birds above frogs and wind
 	float attack = 1.f;       // per-frame one-pole coefficients of the drone mask (1 = instant)
 	float release = 1.f;
 	float tonality = 0.f;     // 0: carrier phase, 1: drone phase
 	bool freeze = false;      // hold the drone mask
 };
 
+// Log-spaced display bands, 100 Hz…12.8 kHz (seven octaves)
+static constexpr unsigned int kDisplayBands = 42;
+static constexpr float kDisplayLoHz = 100.f;
+static constexpr float kDisplayOctaves = 7.f;
+
 struct StampFeatures {
 	float droneRms = 0;
 	float fieldRms = 0;
 	float fieldFlatness = 0; // 0 tonal .. 1 white
-	float fieldCentroid = 0; // Hz
-	float fieldFlux = 0;     // positive spectral change, normalised by energy
-	float eventAmount = 0;   // energy-weighted share of carrier bins above the floor
+	float fieldCentroid = 0; // Hz, power-weighted on a log-frequency scale
+	float fieldFlux = 0;     // positive spectral change in the event band, normalised
+	float eventAmount = 0;   // energy-weighted share of the event band above the floor
 	float droneCentroid = 0; // Hz
+	std::array<float, kDisplayBands> bandDb {};    // carrier power per display band
+	std::array<float, kDisplayBands> bandEvent {}; // its event share (band-weighted)
 };
 
 class Stamp {
@@ -62,7 +71,8 @@ private:
 	float sampleRate = 44100;
 
 	std::vector<float> mask;     // smoothed drone magnitudes
-	std::vector<float> floorEst; // tracked carrier noise floor
+	std::vector<float> levelSm;  // carrier magnitudes, smoothed over ~50 ms (power)
+	std::vector<float> floorEst; // tracked carrier noise floor, of levelSm
 	std::vector<float> prevMag;  // carrier magnitudes of the previous frame
 	std::vector<float> magDrone;
 	std::vector<float> magField;

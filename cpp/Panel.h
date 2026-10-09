@@ -111,6 +111,8 @@ public:
 	}
 	unsigned int getLayer() const { return layer; }
 	float get(unsigned int l, unsigned int knob) const { return values[l][knob]; }
+	// false while a knob of the current layer waits to reach its stored value
+	bool isPicked(unsigned int l, unsigned int knob) const { return picked[l][knob]; }
 	bool isHeld(unsigned int b) const { return held[b]; }
 	bool pressed(unsigned int b) const { return pressedEvent[b]; }
 	bool released(unsigned int b) const { return releasedEvent[b]; }

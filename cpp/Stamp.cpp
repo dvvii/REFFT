@@ -42,6 +42,7 @@ int Stamp::setup(float fs)
 	}
 	const unsigned int maxBins = kSizes.back() / 2 + 1;
 	mask.resize(maxBins);
+	levelSm.resize(maxBins);
 	floorEst.resize(maxBins);
 	prevMag.resize(maxBins);
 	magDrone.resize(maxBins);
@@ -54,6 +55,7 @@ void Stamp::setSizeIndex(unsigned int idx)
 {
 	sizeIdx = std::min<unsigned int>(idx, kSizes.size() - 1);
 	std::fill(mask.begin(), mask.end(), 0.f);
+	std::fill(levelSm.begin(), levelSm.end(), 0.f);
 	std::fill(floorEst.begin(), floorEst.end(), 0.f);
 	std::fill(prevMag.begin(), prevMag.end(), 0.f);
 }
@@ -93,15 +95,20 @@ void Stamp::processFrame(const float* drone, const float* field, float* out,
 	// result fades from magnitude transfer towards a spectral product.
 	const float thresh = dbToLin(-6.f - p.whiten * 94.f);
 	const float floorRise = dbToLin(p.floorRiseDb * frameSec);
+	const float levelCoef = 1.f - expf(-frameSec / 0.05f);
 	const float eventLo = p.eventDb - 6.f;
 	const float tiny = 1e-12f;
 	const unsigned int kLo = std::max(1u, (unsigned int)(100.f / binHz));
 	const unsigned int kHi = std::min(K - 1, (unsigned int)(10000.f / binHz));
 
 	float logPowSum = 0, powSum = 0;
-	float centroidNum = 0, magSum = 0;
-	float droneCentroidNum = 0, droneMagSum = 0;
-	float flux = 0, eventNum = 0;
+	float logHzNum = 0, droneLogHzNum = 0, dronePowSum = 0;
+	float flux = 0, eventNum = 0, bandMagSum = 0;
+	const float logLo = log2f(std::max(1.f, p.eventLoHz));
+	const float logHi = log2f(std::max(p.eventLoHz, p.eventHiHz));
+	std::array<float, kDisplayBands> dispPow {}, dispEvent {};
+	const float bandsPerOctave = kDisplayBands / kDisplayOctaves;
+	const float logDisplayLo = log2f(kDisplayLoHz);
 
 	for(unsigned int k = 0; k < K; ++k)
 	{
@@ -117,14 +124,24 @@ void Stamp::processFrame(const float* drone, const float* field, float* out,
 			mask[k] += coef * (md - mask[k]);
 		}
 
-		// carrier noise floor: follow drops at once, rise slowly
+		// carrier noise floor: follow drops of the smoothed level at once,
+		// rise slowly. Tracking the raw magnitude would put the floor at the
+		// deepest dips of the noise, so plain noise would count as events.
+		float& sm = levelSm[k];
+		sm = sm <= 0 ? mc * mc : sm + levelCoef * (mc * mc - sm);
+		const float level = sqrtf(sm);
 		float& fl = floorEst[k];
-		if(mc < fl || fl <= 0)
-			fl = mc;
+		if(level < fl || fl <= 0)
+			fl = level;
 		else
 			fl *= floorRise;
 		float aboveDb = 20.f * log10f((mc + tiny) / (fl + tiny));
 		float event = std::min(1.f, std::max(0.f, (aboveDb - eventLo) / 12.f));
+		// event band, with half-octave tapers
+		const float logHz = k ? log2f(k * binHz) : 0.f;
+		const float outside = std::max(0.f, std::max(logLo - logHz, logHz - logHi));
+		const float inBand = std::max(0.f, 1.f - 2.f * outside);
+		event *= inBand;
 		float stampW = 1.f - p.floorOnly * event;
 
 		// carrier unit phasor, optionally pulled towards the drone's phase
@@ -161,22 +178,38 @@ void Stamp::processFrame(const float* drone, const float* field, float* out,
 			float pw = mc * mc + tiny;
 			logPowSum += logf(pw);
 			powSum += pw;
-			centroidNum += k * binHz * mc;
-			magSum += mc;
-			droneCentroidNum += k * binHz * magDrone[k];
-			droneMagSum += magDrone[k];
-			flux += std::max(0.f, mc - prevMag[k]);
+			logHzNum += logHz * pw;
+			const float dpw = magDrone[k] * magDrone[k];
+			droneLogHzNum += logHz * dpw;
+			dronePowSum += dpw;
+			flux += inBand * std::max(0.f, mc - prevMag[k]);
 			eventNum += event * mc;
+			bandMagSum += inBand * mc;
+		}
+		const int band = k ? (int)((logHz - logDisplayLo) * bandsPerOctave) : -1;
+		if(band >= 0 && band < (int)kDisplayBands)
+		{
+			dispPow[band] += mc * mc;
+			dispEvent[band] += event * mc * mc;
 		}
 		prevMag[k] = mc;
 	}
 
 	const unsigned int bands = kHi - kLo + 1;
 	f.fieldFlatness = powSum > 0 ? expf(logPowSum / bands) / (powSum / bands) : 0;
-	f.fieldCentroid = magSum > tiny ? centroidNum / magSum : 0;
-	f.droneCentroid = droneMagSum > tiny ? droneCentroidNum / droneMagSum : 0;
-	f.fieldFlux = magSum > tiny ? flux / magSum : 0;
-	f.eventAmount = magSum > tiny ? eventNum / magSum : 0;
+	// Power-weighted mean of log frequency: pink noise sits mid-band, white
+	// noise high, brown noise low. A magnitude-weighted linear mean put
+	// almost every recording near the top, because most bins are high.
+	f.fieldCentroid = powSum > bands * tiny ? exp2f(logHzNum / powSum) : 0;
+	f.droneCentroid = dronePowSum > tiny * tiny ? exp2f(droneLogHzNum / dronePowSum) : 0;
+	f.fieldFlux = bandMagSum > tiny ? flux / bandMagSum : 0;
+	f.eventAmount = bandMagSum > tiny ? eventNum / bandMagSum : 0;
+	for(unsigned int b = 0; b < kDisplayBands; ++b)
+	{
+		// power of a full-scale sine is 1 (magNorm), so this is dBFS
+		f.bandDb[b] = dispPow[b] > 0 ? 10.f * log10f(dispPow[b] + tiny) : -120.f;
+		f.bandEvent[b] = dispPow[b] > 0 ? dispEvent[b] / dispPow[b] : 0.f;
+	}
 
 	d.field.ifft();
 	for(unsigned int n = 0; n < N; ++n)

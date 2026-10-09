@@ -1,0 +1,4 @@
+sampler.cfg
+sampler.cfg.tmp
+samples/
+.cache/

@@ -14,8 +14,11 @@ not behave like a vocoder.
 |---|---|
 | Audio in L | drone (magnitudes) |
 | Audio in R | field recording (carrier) |
-| Audio out L | dry/wet mix |
-| Audio out R | wet only |
+| Audio out L | the sampler, clean (see Sampler) |
+| Audio out R | the stamp: dry/wet mix |
+
+To stamp a recording from the sampler, patch out L into in R. Nothing is
+routed internally, so the stamp sees exactly what any other source would.
 
 Input gain is −3 dB (`settings.json`), set for modular level: a self-oscillating
 filter sine peaks around −4 dBFS. The stock Pepper +10 dB clips modular
@@ -34,8 +37,8 @@ act until they reach the stored value) after every layer change.
 | 4 | **contrast**: drone mask exponent 0.5–4 (1 at about 1/3) | event threshold (3–30 dB above floor) |
 | 5 | **floor only**: stamp only the field's noise floor, pass events | dry source: field (0) → drone (1) |
 | 6 | **smear**: mask release (0–5 s) | CV out smoothing (1 ms–0.5 s) |
-| 7 | **tonality**: field phase (0) → drone phase (1) | — |
-| 8 | wet/dry | — |
+| 7 | **tonality**: field phase (0) → drone phase (1) | event band edge (100 Hz–12.8 kHz, 2 kHz) |
+| 8 | wet/dry | event band edge (same range, 10 kHz) |
 
 ## Buttons
 
@@ -47,7 +50,7 @@ act until they reach the stored value) after every layer change.
 ## LEDs
 
 LEDs 1–8 are level meters, two LEDs each: in L (1–2), in R (3–4), out L
-(5–6), out R (7–8). Brightness is PWM (1 kHz), on a dB scale from −48 to
+(sampler, 5–6), out R (stamp, 7–8). Brightness is PWM (1 kHz), on a dB scale from −48 to
 0 dBFS: the first LED of a pair covers −48…−24 dB, the second −24…0 dB.
 Input meters read the jacks before the gain knobs. For a second after a size
 change they show the FFT size instead. LED 9 is freeze, LED 10 is shift
@@ -56,17 +59,75 @@ change they show the FFT size instead. LED 9 is freeze, LED 10 is shift
 ## Scope
 
 The IDE scope has four channels: in L and in R (raw, before the gain knobs),
-out L and out R (as written to the outputs). Its FFT mode gives the spectrum
+out L (sampler) and out R (stamp), as written to the outputs. Its FFT mode gives the spectrum
 of each.
+
+## Sampler (browser GUI)
+
+A built-in player for field recordings of any length, streamed from the SD
+card, controlled from the Bela GUI at `http://bela.local/gui` while the
+project runs. It plays on out L only; patch out L into in R to stamp it.
+
+- **Files**: audio files (wav, aif, flac, ogg, mp3, caf, w64) in the project
+  folder or its `samples/` folder. Upload them with the IDE, or
+  `rsync -a recordings/ bbb:Bela/projects/refft-cpp/samples/`, then press
+  rescan. A file starts playing as soon as it is picked.
+- **Waveform**: drag an edge to move it, drag elsewhere to draw a new region,
+  click to move the playhead, double-click for the whole file. The first time
+  a file is picked it is read through once for its waveform, loudness and
+  peak (about 10–20 s for 45 minutes); the result is cached in `.cache/`.
+- **Transport**: play/stop (space), back to the region start (enter), loop
+  (`l`; off = one shot), normalise (see below; the file's level and the gain
+  applied are shown next to its name, and normalisation glides in once the
+  file has been read through), and for multichannel files mix / L / R (keeps
+  the playhead).
+- **Sliders**: gain −36…+24 dB (a trim on top of normalise), crossfade
+  2 ms–2 s. Drag, shift-drag for fine steps, wheel to nudge, double-click to
+  reset.
+- **Meters**: in L, in R, out L (sampler), out R (stamp). Disk underruns, if any, are
+  shown next to the file name.
+- **Panel** (display only): buttons 1–4 (layer, freeze, FFT size with its
+  latency, bypass) and the stored value of every knob on both layers, in the
+  units of the table above. The live layer is lit, and the knob being turned
+  is yellow. A knob waiting for pickup reads "turn to …", with an orange tick
+  at the physical knob's position.
+- **CV outs**: the eight outputs as 0–5 V bars, labelled as in the CV out
+  list below.
+- **Spectrum**: in R in 42 bands (100 Hz–12.8 kHz), each lit yellow by how
+  much of it counts as events, with the event band (B7, B8) marked. Use it
+  to set the band around the birds and leave out the frogs.
+
+**Normalise and the limiter.** Field recordings peak at 0 dBFS from a few
+bumps while their ambience sits 25–55 dB lower, so scaling to the peak does
+nothing. Normalise instead measures the median of 100 ms RMS levels (the
+ambience) and brings it to −26 dBFS, unless that would push the loudest 0.1%
+of blocks more than 12 dB into the limiter; then it gives less gain (a quiet
+bed with loud calls). The gain is clamped to −20…+40 dB. A lookahead peak
+limiter (1.5 ms lookahead, 100 ms release, −1 dBFS ceiling) on out L catches
+what this and the trim push up; the GUI shows when it is reducing.
+
+Playback is at the original speed (files at another sample rate are
+resampled with cubic interpolation). Two voices each stream through a 3 s
+ring buffer that a disk thread keeps full. The idle voice waits filled at the
+region start, so a loop point is an instant equal-power crossfade, capped at
+half the region so short loops still crossfade. A seek or a new file
+re-arms the idle voice there and crossfades once it holds 4096 frames,
+typically within a few ms. Streaming one file takes 176 kB/s from the SD
+card and about 1 MB of memory.
+
+Settings (file, region, play state, loop, sliders) are
+saved to `sampler.cfg` in the project folder two seconds after the last
+change, and restored at boot, so a startup project plays its recording
+without a browser. Delete the file to start from defaults.
 
 ## CV out (0–1 → 0–5 V)
 
 1. drone level (−60…0 dB)
 2. field level
 3. field noisiness (spectral flatness, 100 Hz–10 kHz)
-4. field brightness (centroid, 50 Hz–10 kHz, log)
-5. onset gate from the field (spectral flux, 20 ms)
-6. event amount (share of field energy above its tracked floor)
+4. field brightness (centroid, 100 Hz–4 kHz, log)
+5. onset gate from the field's event band (spectral flux, 20 ms)
+6. event amount (share of the event band's energy above its tracked floor)
 7. wet level
 8. drone brightness (centroid)
 
@@ -110,7 +171,7 @@ through; the noise only provides texture.
   2048, 29 ms at 1024, 232 ms at 8192. The task has one hop of time
   (11.6 ms at 2048) to finish; if it is still busy when the next hop comes,
   that frame is skipped and counted ("frames skipped").
-- The dry path (out L's dry component) is **not** delayed, so dry and wet
+- The dry path (out R's dry component) is **not** delayed, so dry and wet
   are offset by that latency.
 
 ### 2. Analysis
@@ -189,28 +250,37 @@ low settings.
 
 ### 5. Floor tracking and "floor only"
 
-Each carrier bin has a noise-floor estimate `fl`:
+Each carrier bin has a smoothed level `lv` (its power through a 50 ms
+one-pole, square-rooted) and a noise-floor estimate `fl` of that level:
 
-    if mc < fl:  fl = mc                       (follow drops at once)
+    if lv < fl:  fl = lv                       (follow drops at once)
     else:        fl = fl · rise                (creep up by B3 dB/s, 0.5…30.5)
 
 This is a minimum tracker: it sits at the low edge of the noise
-fluctuation, not at its average. Typical noise frames read a few dB above
-it, so the event threshold needs to sit well above 0 dB.
+fluctuation, not at its average. The smoothing narrows that fluctuation;
+tracking the raw magnitude instead put the floor at the deepest dips of
+each noise bin, 15–20 dB under its average, so plain noise read as events.
+Typical noise frames still read a few dB above the floor, so the event
+threshold needs to sit well above 0 dB.
+
+Only bins in the **event band** (B7 and B8 set its edges, either way round;
+default 2–10 kHz) can be events, with half-octave tapers outside it. In the
+Calanoa recordings the frogs sit around 350–500 Hz and the birds above
+2 kHz, so the default band leaves the frog chorus to the floor.
 
 How far a bin is above its floor, `above = 20·log10(mc / fl)`, becomes an
 **event** amount, a soft gate 12 dB wide centred on the event threshold `E`
-(knob B4, 3…30 dB, about 12 dB at its default):
+(knob B4, 3…30 dB, about 12 dB at its default), weighted by the band:
 
-    event = clamp((above − (E − 6)) / 12, 0, 1)
+    event = band(f) · clamp((above − (E − 6)) / 12, 0, 1)
 
 The **floor only** knob (A5) blends each bin between stamped and untouched:
 
     w   = 1 − floorOnly · event
     mag = stamped · w + mc · (1 − w)
 
-At `floorOnly = 0` every bin is stamped. At `floorOnly = 1`, bins where
-something stands out of the noise (a bird, a footstep, a gust) keep the
+At `floorOnly = 0` every bin is stamped. At `floorOnly = 1`, bins in the
+event band where something stands out of the noise (a bird call) keep the
 recording's own magnitude, and because they also keep its phase, those
 sounds pass through the wet path unchanged (delayed by the latency). Only
 the steady noise bed is replaced by the drone. The rise speed (B3) decides
@@ -251,11 +321,11 @@ phasor `d = D[k] / |D[k]|` and renormalises:
 - **Wet/dry** (A8) is an equal-power crossfade: `wet · sin(v·π/2)` +
   `dry · cos(v·π/2)`.
 - The dry signal is itself a blend between field and drone (**dry source**,
-  B5, also equal-power), so out L can be the stamped texture over the
-  original recording or over the drone.
-- **Bypass** (button 4) fades out L to the dry signal and out R to silence
-  over about 10 ms.
-- **Output gain** (B1) applies to both outputs, `4v²`, unity at centre.
+  B5, also equal-power), so out R can be the stamped texture over the
+  original recording or over the drone; fully wet it is the stamp alone.
+- **Bypass** (button 4) fades out R to the dry signal over about 10 ms.
+- **Output gain** (B1) applies to out R, `4v²`, unity at centre. Out L (the
+  sampler) has its own gain in the GUI.
 - **FFT size** (button 3) fades the wet path out over 20 ms, waits for the
   task to finish, switches size (which resets the mask, floor and flux
   state), clears the overlap buffer and fades back in.
@@ -268,17 +338,24 @@ recording unless noted:
 - **Flatness**: geometric over arithmetic mean of bin power. Pure white
   noise reads about 0.56, not 1, because the power of a noise bin varies
   frame to frame; tones and silence read lower.
-- **Centroid**: magnitude-weighted mean frequency, mapped on a log scale
-  50 Hz…10 kHz. The drone gets one too (CV 8).
-- **Flux**: the sum of bin magnitude increases since the last frame,
-  divided by the total magnitude. The onset gate (CV 5) fires for 20 ms
+- **Centroid**: the power-weighted mean of log frequency, mapped 100 Hz…
+  4 kHz (where these recordings sit; it measures over 100 Hz…10 kHz). Pink noise reads mid-scale, white noise near the top, brown noise
+  near the bottom. (A magnitude-weighted mean of linear frequency put
+  almost everything near the top, as most bins are high.) The drone gets
+  one too (CV 8).
+- **Flux**: the sum of bin magnitude increases since the last frame, in the
+  event band, divided by the band's total magnitude. The onset gate (CV 5) fires for 20 ms
   when flux exceeds twice its running average plus 0.02.
-- **Event amount**: the magnitude-weighted average of `event` from step 5,
-  i.e. how much of the recording currently stands out of its floor.
+- **Event amount**: the magnitude-weighted average of `event` from step 5
+  over the event band, i.e. how much of the band currently stands out of
+  its floor.
 - **Levels**: RMS of each input frame (after the gain knobs) and the
   envelope of the wet output, on a −60…0 dB scale.
 
 All CV outs except the gate are smoothed by the CV smoothing knob (B6).
+Below −60 dB, where the level CVs read 0, noisiness, brightness, the onset
+gate and the event amount fade to 0 over 6 dB (drone brightness follows the
+drone's level): at that point they would only describe the codec's noise.
 
 ### Things to try while working through it
 
@@ -302,6 +379,17 @@ All CV outs except the gate are smoothed by the CV smoothing knob (B6).
 - `Stamp.{h,cpp}`: the per-frame spectral engine. Hann analysis/synthesis,
   overlap 4, magnitudes normalised so a full-scale sine reads 1.0 at every
   FFT size.
+- `Sampler.{h,cpp}`: the field-recording player. A disk thread fills the
+  two voices' ring buffers (libsndfile); a loader thread scans and opens
+  files, analyses them (peak, overview, cached) and saves `sampler.cfg`. The
+  audio thread requests a stream position by bumping a generation number and
+  only touches atomics and the rings: no allocation, locks or I/O.
+- `sketch.js`: the p5.js GUI. `render.cpp` sends it a status buffer every
+  33 ms plus the file list, waveform overview and loader messages; it sends
+  back `{address, value}` control messages (`onGuiControl`). A value being
+  edited shows the local copy for 600 ms so the echo doesn't fight the drag;
+  when the status names a file list or clip the page doesn't have (it
+  connected late, or the project restarted), the page asks for `/sync`.
 - `Panel.h`: Pepper knobs (layers, pickup), buttons (debounced; the state at
   boot counts as released), LEDs.
 - `render.cpp`: I/O, parameter mapping, features to CV. The spectral work runs
@@ -311,7 +399,7 @@ All CV outs except the gate are smoothed by the CV smoothing knob (B6).
 ## Build and run
 
 ```sh
-rsync -a --exclude build ./ bbb:Bela/projects/refft-cpp/
+rsync -a --exclude build --exclude sampler.cfg --exclude samples ./ bbb:Bela/projects/refft-cpp/
 ssh bbb 'make -C ~/Bela PROJECT=refft-cpp run'
 ```
 
