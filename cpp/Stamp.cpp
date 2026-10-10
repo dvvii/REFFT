@@ -4,6 +4,9 @@
 
 constexpr unsigned int Stamp::kOverlap;
 constexpr std::array<unsigned int, 4> Stamp::kSizes;
+constexpr float Stamp::kMatchSec;
+constexpr float Stamp::kMatchMinDb;
+constexpr float Stamp::kMatchMaxDb;
 
 static inline float dbToLin(float db) { return powf(10.f, db / 20.f); }
 
@@ -58,6 +61,7 @@ void Stamp::setSizeIndex(unsigned int idx)
 	std::fill(levelSm.begin(), levelSm.end(), 0.f);
 	std::fill(floorEst.begin(), floorEst.end(), 0.f);
 	std::fill(prevMag.begin(), prevMag.end(), 0.f);
+	carrierPowSm = outPowSm = 0;
 }
 
 void Stamp::processFrame(const float* drone, const float* field, float* out,
@@ -104,6 +108,7 @@ void Stamp::processFrame(const float* drone, const float* field, float* out,
 	float logPowSum = 0, powSum = 0;
 	float logHzNum = 0, droneLogHzNum = 0, dronePowSum = 0;
 	float flux = 0, eventNum = 0, bandMagSum = 0;
+	float carrierPow = 0, outPow = 0;
 	const float logLo = log2f(std::max(1.f, p.eventLoHz));
 	const float logHi = log2f(std::max(p.eventLoHz, p.eventHiHz));
 	std::array<float, kDisplayBands> dispPow {}, dispEvent {};
@@ -169,6 +174,11 @@ void Stamp::processFrame(const float* drone, const float* field, float* out,
 		float mag = stamped * stampW + mc * (1.f - stampW);
 		if(0 == k)
 			mag = 0; // no DC
+		else
+		{
+			carrierPow += mc * mc;
+			outPow += mag * mag;
+		}
 		// DC and Nyquist bins are real
 		d.field.fdr(k) = ur * mag * d.outScale;
 		d.field.fdi(k) = (0 == k || K - 1 == k) ? 0 : ui * mag * d.outScale;
@@ -211,7 +221,23 @@ void Stamp::processFrame(const float* drone, const float* field, float* out,
 		f.bandEvent[b] = dispPow[b] > 0 ? dispEvent[b] / dispPow[b] : 0.f;
 	}
 
+	const float matchCoef = 1.f - expf(-frameSec / kMatchSec);
+	if(outPowSm <= 0 || carrierPowSm <= 0)
+	{
+		carrierPowSm = carrierPow;
+		outPowSm = outPow;
+	}
+	else
+	{
+		carrierPowSm += matchCoef * (carrierPow - carrierPowSm);
+		outPowSm += matchCoef * (outPow - outPowSm);
+	}
+	float matchDb = outPowSm > 0 && carrierPowSm > 0 ? 10.f * log10f(carrierPowSm / outPowSm) : 0.f;
+	matchDb = std::min(kMatchMaxDb, std::max(kMatchMinDb, matchDb));
+	f.matchDb = matchDb;
+
 	d.field.ifft();
+	const float match = dbToLin(matchDb);
 	for(unsigned int n = 0; n < N; ++n)
-		out[n] = d.field.td(n) * d.window[n];
+		out[n] = d.field.td(n) * d.window[n] * match;
 }

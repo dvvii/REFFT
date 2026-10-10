@@ -35,6 +35,7 @@ struct StampFeatures {
 	float fieldFlux = 0;     // positive spectral change in the event band, normalised
 	float eventAmount = 0;   // energy-weighted share of the event band above the floor
 	float droneCentroid = 0; // Hz
+	float matchDb = 0;       // level-matching gain applied to the output
 	std::array<float, kDisplayBands> bandDb {};    // carrier power per display band
 	std::array<float, kDisplayBands> bandEvent {}; // its event share (band-weighted)
 };
@@ -69,6 +70,13 @@ private:
 	std::array<SizeData, kSizes.size()> sizes;
 	unsigned int sizeIdx = 1;
 	float sampleRate = 44100;
+	// Level matching: the output is scaled so its power, smoothed over
+	// kMatchSec, equals the carrier's. Without it the wet level moved over
+	// 80 dB with whiten and contrast (a quiet carrier times the drone's
+	// per-bin magnitudes at one end, the drone's own level at the other).
+	static constexpr float kMatchSec = 0.4f;
+	static constexpr float kMatchMinDb = -48.f, kMatchMaxDb = 60.f;
+	float carrierPowSm = 0, outPowSm = 0;
 
 	std::vector<float> mask;     // smoothed drone magnitudes
 	std::vector<float> levelSm;  // carrier magnitudes, smoothed over ~50 ms (power)
