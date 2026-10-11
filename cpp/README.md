@@ -1,7 +1,7 @@
 # REFFT (C++)
 
 Real-time timbre stamp for Pepper, running on a PocketBeagle 2 with a classic
-Bela rev C cape (`ssh bbb`). The C++ successor of `../_main.pd`.
+Bela rev C cape. Used in Errant Timbres.
 
 The field recording keeps its phase and noise; the drone supplies the
 magnitude of every FFT bin. Noisy recordings take on the drone's harmonics as
@@ -11,7 +11,7 @@ not behave like a vocoder.
 ## I/O
 
 | | |
-|---|---|
+| --- | --- |
 | Audio in L | drone (magnitudes) |
 | Audio in R | field recording (carrier) |
 | Audio out L | the sampler, clean (see Sampler) |
@@ -36,7 +36,7 @@ each knob's measured top, and readings are scaled by it so every knob spans
 `analogRead`) if the module or its knobs change.
 
 | Knob | Layer A | Layer B |
-|---|---|---|
+| --- | --- | --- |
 | 1 | drone gain (off → 0 dB at centre → +12 dB) | out R gain (off, then −24…+24 dB; 0 dB at centre) |
 | 2 | field gain (off → 0 dB at centre → +12 dB) | mask attack (0–2 s) |
 | 3 | **whiten**: product (0) → full magnitude transfer (1) | floor tracker speed (0.5–30.5 dB/s) |
