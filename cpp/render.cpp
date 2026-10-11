@@ -34,7 +34,7 @@ constexpr float Panel::kKnobTopMargin;
 enum Knob { kKnobDroneGain, kKnobFieldGain, kKnobWhiten, kKnobContrast, kKnobFloorOnly, kKnobRelease, kKnobTonality, kKnobWetDry };
 enum KnobB { kKnobOutGain, kKnobAttack, kKnobFloorSpeed, kKnobEventDb, kKnobDryBalance, kKnobCvSmooth, kKnobEventLo, kKnobEventHi };
 enum Button { kButtonShift, kButtonFreeze, kButtonSize, kButtonBypass };
-enum Feature { kFeatDrone, kFeatField, kFeatFlatness, kFeatCentroid, kFeatFlux, kFeatEvents, kFeatDroneCentroid, kFeatMatchDb, kNumFeatures };
+enum Feature { kFeatDrone, kFeatField, kFeatFlatness, kFeatCentroid, kFeatFlux, kFeatEvents, kFeatDroneCentroid, kFeatMakeupDb, kNumFeatures };
 
 static constexpr unsigned int kBufSize = 32768; // power of two, > 2 * max FFT size
 static constexpr unsigned int kBufMask = kBufSize - 1;
@@ -72,13 +72,7 @@ static unsigned int gPendingSize = 1;
 static float gWetFade = 1;
 static bool gBypass = false;
 static float gBypassGain = 0;
-// out R auto level: brings the mix's loudness to kAutoTargetDb so the stamp
-// meets modular levels however quiet the recording reaching in R is
-static constexpr float kAutoTargetDb = -14.f;
-static constexpr float kAutoMinDb = -12.f, kAutoMaxDb = 48.f;
-static constexpr float kAutoGateDb = -70.f; // below this the gain holds
-static float gAutoPow = 0;    // smoothed mix power
-static float gAutoDb = 0;     // applied gain
+// out R ends in a limiter, so the gain knob can go well above unity
 static Limiter gLimiterR;
 static float gLimitRPeakDb = 0;
 static float gWetEnv = 0;
@@ -125,7 +119,7 @@ enum GuiStatus {
 	kStPicked = kStKnobs + Panel::kLayers * Panel::kKnobs,
 	kStPots = kStPicked + Panel::kLayers * Panel::kKnobs,
 	kStCv = kStPots + Panel::kKnobs,
-	kStMedianDb = kStCv + 8, kStNormDb, kStLimitDb, kStMatchDb, kStAutoDb, kStLimitRDb,
+	kStMedianDb = kStCv + 8, kStNormDb, kStLimitDb, kStMakeupDb, kStLimitRDb,
 	kStSize
 };
 static std::atomic<bool> gGuiSync {true};
@@ -239,8 +233,7 @@ static void sendGui(BelaContext* context)
 		st[kStMedianDb] = analysed ? c->medianDb.load() : -180;
 		st[kStNormDb] = analysed ? c->normDb.load() : 0;
 		st[kStLimitDb] = gLimitPeakDb;
-		st[kStMatchDb] = gFeatures[kFeatMatchDb];
-		st[kStAutoDb] = gAutoDb;
+		st[kStMakeupDb] = gFeatures[kFeatMakeupDb];
 		st[kStLimitRDb] = gLimitRPeakDb;
 		gLimitRPeakDb = 0;
 		gLimitPeakDb = 0;
@@ -331,7 +324,7 @@ static void stampTask(void*)
 	gFeatures[kFeatFlux] = f.fieldFlux;
 	gFeatures[kFeatEvents] = f.eventAmount;
 	gFeatures[kFeatDroneCentroid] = f.droneCentroid;
-	gFeatures[kFeatMatchDb] = f.matchDb;
+	gFeatures[kFeatMakeupDb] = f.makeupDb;
 	for(unsigned int b = 0; b < kDisplayBands; ++b)
 	{
 		gBandDb[b] = f.bandDb[b];
@@ -419,8 +412,10 @@ void render(BelaContext* context, void* userData)
 	gReleaseCoef = onePoleCoef(5.f * A(kKnobRelease) * A(kKnobRelease), 1.f / hopSec);
 	gTonality = A(kKnobTonality);
 	float wetDry = A(kKnobWetDry);
-	// a trim on top of the auto level: off, 0 dB at centre, +12 dB
-	float outGain = 4.f * B(kKnobOutGain) * B(kKnobOutGain);
+	// out R gain: off at the bottom, then −24…+24 dB (0 dB at centre); the
+	// limiter holds the peaks, so it can push the stamp to modular level
+	const float outKnob = B(kKnobOutGain);
+	float outGain = outKnob < 0.02f ? 0.f : powf(10.f, (-24.f + 48.f * outKnob) / 20.f);
 	gAttackCoef = onePoleCoef(2.f * B(kKnobAttack) * B(kKnobAttack), 1.f / hopSec);
 	gFloorRiseDb = 0.5f + 30.f * B(kKnobFloorSpeed) * B(kKnobFloorSpeed);
 	gEventDb = 3.f + 27.f * B(kKnobEventDb);
@@ -446,26 +441,6 @@ void render(BelaContext* context, void* userData)
 		float a = fabsf(x);
 		gMeter[m] += (a > gMeter[m] ? meterAttack : meterRelease) * (a - gMeter[m]);
 	};
-
-	// auto level for out R, per block: follow the mix's power over ~0.5 s,
-	// then move the gain towards the target, down within ~0.2 s, up over
-	// ~2 s, so single events don't pump it; hold it in silence
-	const float blockSec = context->audioFrames / fs;
-	const float autoDownCoef = onePoleCoef(0.2f, 1.f / blockSec);
-	const float autoUpCoef = onePoleCoef(2.f, 1.f / blockSec);
-	const float autoPowCoef = onePoleCoef(0.5f, 1.f / blockSec);
-	const float autoStart = powf(10.f, gAutoDb / 20.f);
-	float autoEnd = autoStart;
-	{
-		const float levelDb = 10.f * log10f(gAutoPow + 1e-20f);
-		if(levelDb > kAutoGateDb)
-		{
-			const float want = std::min(kAutoMaxDb, std::max(kAutoMinDb, kAutoTargetDb - levelDb));
-			gAutoDb += (want < gAutoDb ? autoDownCoef : autoUpCoef) * (want - gAutoDb);
-		}
-		autoEnd = powf(10.f, gAutoDb / 20.f);
-	}
-	float mixSq = 0;
 
 	gSampler.process(gSamplerOut.data(), context->audioFrames);
 	gLimitPeakDb = std::min(gLimitPeakDb, gSampler.limitDb.load());
@@ -519,9 +494,7 @@ void render(BelaContext* context, void* userData)
 		mix = mix * (1.f - gBypassGain) + dry * gBypassGain;
 		float wetOut = wet * (1.f - gBypassGain);
 		const float outL = gSamplerOut[n];
-		mixSq += mix * mix;
-		const float autoGain = autoStart + (autoEnd - autoStart) * n / context->audioFrames;
-		const float outR = gLimiterR.process(mix * autoGain * outGain);
+		const float outR = gLimiterR.process(mix * outGain);
 		gLimitRPeakDb = std::min(gLimitRPeakDb, gLimiterR.reductionDb());
 		audioWrite(context, n, 0, outL);
 		audioWrite(context, n, 1, outR);
@@ -530,7 +503,6 @@ void render(BelaContext* context, void* userData)
 		gScope.log(rawDrone, rawField, outL, outR);
 		gWetEnv += envCoef * (fabsf(wetOut) - gWetEnv);
 	}
-	gAutoPow += autoPowCoef * (mixSq / context->audioFrames - gAutoPow);
 
 	// CV outs, updated per block
 	float target[8];

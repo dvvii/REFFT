@@ -25,7 +25,7 @@ const ST = {
 	listId: 14, channels: 15, peakDb: 16, analysed: 17, play: 18, underruns: 19,
 	meters: 20, layer: 24, freeze: 25, fft: 26, bypass: 27, touched: 28,
 	knobs: 29, picked: 45, pots: 61, cv: 69, medianDb: 77, normDb: 78, limitDb: 79,
-	matchDb: 80, autoDb: 81, limitRDb: 82, size: 83,
+	makeupDb: 80, limitRDb: 81, size: 82,
 };
 const METERS = ['in L (drone)', 'in R (field)', 'out L (sampler)', 'out R (stamp)'];
 const CHANNELS = ['mix', 'L', 'R'];
@@ -55,7 +55,7 @@ const KNOBS = [
 		['wet', pct],
 	],
 	[
-		['out gain R', gainDb],
+		['out R gain', (v) => v < 0.02 ? 'off' : fmtDb(-24 + 48 * v)],
 		['attack', (v) => fmtSec(2 * v * v)],
 		['floor speed', (v) => (0.5 + 30 * v * v).toFixed(1) + ' dB/s'],
 		['event thresh', (v) => (3 + 27 * v).toFixed(1) + ' dB'],
@@ -462,8 +462,7 @@ function drawMeters(x, y, w) {
 		fill(C.dim); noStroke(); textSize(10); textAlign(LEFT, BASELINE);
 		let label = METERS[m];
 		if (board && 3 === m)
-			label = 'out R · auto ' + (board[ST.autoDb] >= 0 ? '+' : '') + board[ST.autoDb].toFixed(0)
-				+ (board[ST.limitRDb] < -0.1 ? ' · lim ' + board[ST.limitRDb].toFixed(0) : '');
+			label += board[ST.limitRDb] < -0.1 ? ' · lim ' + board[ST.limitRDb].toFixed(0) + ' dB' : '';
 		text(label, mx, y + 10);
 		textAlign(RIGHT, BASELINE);
 		text(db > -60 ? db.toFixed(0) + ' dB' : '–', mx + mw, y + 10);
@@ -486,7 +485,7 @@ function drawPanel(x, y, w) {
 	const chips = [
 		['1 shift', layer > 0.5 ? 'layer B' : 'layer A', layer > 0.5],
 		['2 freeze', board[ST.freeze] > 0.5 ? 'frozen' : 'off', board[ST.freeze] > 0.5],
-		['3 FFT · level match', board[ST.fft] + ' (' + (1000 * board[ST.fft] * 1.25 / 44100).toFixed(0) + ' ms) · ' + fmtDb(board[ST.matchDb]), false],
+		['3 FFT · make-up', board[ST.fft] + ' (' + (1000 * board[ST.fft] * 1.25 / 44100).toFixed(0) + ' ms) · ' + fmtDb(board[ST.makeupDb]), false],
 		['4 bypass', board[ST.bypass] > 0.5 ? 'bypassed' : 'off', board[ST.bypass] > 0.5],
 	];
 	const share = [1, 1, 1.8, 1];

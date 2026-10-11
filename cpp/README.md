@@ -37,7 +37,7 @@ each knob's measured top, and readings are scaled by it so every knob spans
 
 | Knob | Layer A | Layer B |
 |---|---|---|
-| 1 | drone gain (off → 0 dB at centre → +12 dB) | out R trim on top of the auto level (same curve) |
+| 1 | drone gain (off → 0 dB at centre → +12 dB) | out R gain (off, then −24…+24 dB; 0 dB at centre) |
 | 2 | field gain (off → 0 dB at centre → +12 dB) | mask attack (0–2 s) |
 | 3 | **whiten**: product (0) → full magnitude transfer (1) | floor tracker speed (0.5–30.5 dB/s) |
 | 4 | **contrast**: drone mask exponent 0.5–4 (1 at about 1/3) | event threshold (3–30 dB above floor) |
@@ -93,7 +93,7 @@ project runs. It plays on out L only; patch out L into in R to stamp it.
 - **Meters**: in L, in R, out L (sampler), out R (stamp). Disk underruns, if any, are
   shown next to the file name.
 - **Panel** (display only): buttons 1–4 (layer, freeze, FFT size with its
-  latency and the stamp's level-matching gain, bypass) and the stored value of every knob on both layers, in the
+  latency and the stamp's whiten make-up gain, bypass) and the stored value of every knob on both layers, in the
   units of the table above. The live layer is lit, and the knob being turned
   is yellow. A knob waiting for pickup reads "turn to …", with an orange tick
   at the physical knob's position.
@@ -253,8 +253,8 @@ Working through the extremes:
 
 Left alone, this made whiten a level control for the wet path as well:
 with a quiet field the product end sat 40–80 dB below the transfer end.
-Level matching (step 7) takes that out, so whiten and contrast change the
-character of the stamp, not its loudness.
+Static compensation (step 7) takes most of that out, so whiten and
+contrast change the character of the stamp rather than its loudness.
 
 ### 5. Floor tracking and "floor only"
 
@@ -323,15 +323,27 @@ phasor `d = D[k] / |D[k]|` and renormalises:
   sum of the squared windows at overlap 4. A steady signal at full transfer
   therefore comes out at the level of the mask: a −6 dB drone partial gives a
   −6 dB output partial.
-- **Level matching**: the output power of each frame and the carrier's are
-  each smoothed over 0.4 s, and the output is scaled by their ratio
-  (−48…+60 dB, shown in the GUI next to the FFT size). The stamp then plays
-  at the field recording's loudness whatever whiten (A3), contrast (A4) or
-  the drone's level: in a model with a −45 dB recording and a −15 dB drone,
-  the wet level stayed within −45…−47.5 dB across the whole A3 × A4 range,
-  where it had spanned −91…−10 dB. Changes faster than 0.4 s (a bird call, a
-  drone note) still come through; the field gain (A2) sets the wet level,
-  and the drone gain (A1) now mostly matters for its level in the dry mix.
+- **Level compensation** is static, with nothing that follows the carrier
+  from frame to frame. An earlier version scaled each frame to the carrier's
+  power smoothed over 0.4 s. With dense birdsong (the 5am recording) that
+  pumped: every call pulled the drone up and down with it. Two fixed gains
+  replace it:
+  - **Contrast** (A4) scales the sharpened mask back to the drone's own
+    power, so sharpening partials doesn't also turn the stamp down.
+  - **Whiten make-up**: bins below the whiten threshold are a spectral
+    product (carrier × drone), so their level depends on the carrier's.
+    They get `threshold − ref − 6` dB of make-up (0…60 dB, shown in the GUI
+    next to the FFT size). `ref` is the carrier's mean bin power, averaged
+    in dB over 10 s, so one bird call barely moves it. A carrier at its
+    usual level then lands 6 dB under the drone.
+
+  The wet level therefore follows the drone (A1), not the recording. In a
+  model using the 5am recording and a −15 dBFS drone, it stayed between −16
+  and −23 dBFS across the whole A3 × A4 range, at carrier levels of both
+  −26 and −45 dBFS. The swing of the 100 ms level with whiten up (the drone
+  alone) fell from 3.5 dB under level matching to 0.3–1.5 dB. With whiten
+  down, the stamp follows the birds as the recording does, and their peaks
+  go to the out R limiter.
 
 ### 8. Mix and output (render.cpp)
 
@@ -341,15 +353,13 @@ phasor `d = D[k] / |D[k]|` and renormalises:
   B5, also equal-power), so out R can be the stamped texture over the
   original recording or over the drone; fully wet it is the stamp alone.
 - **Bypass** (button 4) fades out R to the dry signal over about 10 ms.
-- **Auto level** brings out R to modular level whatever reaches in R: the
-  mix's power, smoothed over 0.5 s, is pulled towards −14 dBFS RMS by a
-  gain of −12…+48 dB that falls within about 0.2 s and rises over about 2 s,
-  so single calls don't pump it, and holds below −70 dBFS so silence isn't
-  boosted. The GUI shows it next to the out R meter.
-- **Output trim** (B1) applies after it, `4v²`, unity at centre.
+- **Output gain** (B1) applies to out R: off at the bottom, then −24…+24 dB
+  linear in dB, 0 dB at centre. The stamp sits near the drone's level, and
+  the limiter holds the peaks, so this knob takes it up to modular level.
 - **Limiter**: out R then goes through the same lookahead limiter as the
-  sampler (`Limiter.h`, −1 dBFS, 1.5 ms). Out L (the sampler) has its own
-  gain in the GUI.
+  sampler (`Limiter.h`, −1 dBFS, 1.5 ms), so high gain settings don't clip.
+  The GUI shows any limiting next to the out R meter. Out L (the sampler)
+  has its own gain in the GUI.
 - **FFT size** (button 3) fades the wet path out over 20 ms, waits for the
   task to finish, switches size (which resets the mask, floor and flux
   state), clears the overlap buffer and fades back in.
