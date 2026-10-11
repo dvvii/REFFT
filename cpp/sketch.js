@@ -159,16 +159,77 @@ function connected() {
 
 // --- input ------------------------------------------------------------------
 
-const mouse = { pressed: false, released: false, double: false, wheel: 0 };
+// tap: a press released without moving (touch), so a swipe over the file
+// list scrolls it instead of loading the file under the finger
+const mouse = { pressed: false, released: false, double: false, wheel: 0, touch: false, tap: false };
 let drag = null; // { id, ... } while a widget owns the mouse
 
-function mousePressed() { mouse.pressed = true; }
-function mouseReleased() { mouse.released = true; }
-function doubleClicked() { mouse.double = true; }
+// Pointer position in canvas pixels. Input comes from Pointer Events on the
+// canvas, which cover mouse, touch and pencil alike; p5's mouseX and touch
+// callbacks don't follow a finger on iPad.
+let ptrX = -1, ptrY = -1;
+const ptr = { id: null, clearHover: false, x0: 0, y0: 0, lastY: 0, moved: false, scroll: 0, prevTapMs: -1e9, prevTapX: 0, prevTapY: 0 };
+
+function setPtr(e) {
+	const r = e.target.getBoundingClientRect();
+	ptrX = e.clientX - r.left;
+	ptrY = e.clientY - r.top;
+}
+
+function attachPointer(el) {
+	el.style.touchAction = 'none';
+	el.addEventListener('pointerdown', (e) => {
+		if (null !== ptr.id) return; // one pointer at a time
+		ptr.id = e.pointerId;
+		try { el.setPointerCapture(e.pointerId); } catch (err) {}
+		setPtr(e);
+		mouse.pressed = true;
+		mouse.touch = 'mouse' !== e.pointerType;
+		// a second tap within 350 ms at the same spot is a double click
+		if (mouse.touch && performance.now() - ptr.prevTapMs < 350 && dist(ptrX, ptrY, ptr.prevTapX, ptr.prevTapY) < 30)
+			mouse.double = true;
+		ptr.x0 = ptrX; ptr.y0 = ptr.lastY = ptrY; ptr.moved = false; ptr.scroll = 0;
+		e.preventDefault();
+	});
+	el.addEventListener('pointermove', (e) => {
+		if (null !== ptr.id && e.pointerId !== ptr.id) return;
+		setPtr(e);
+		if (null === ptr.id || 'mouse' === e.pointerType) return;
+		if (dist(ptrX, ptrY, ptr.x0, ptr.y0) > 10) ptr.moved = true;
+		// a swipe that no widget owns scrolls, one list row per 22 px
+		if (!drag) {
+			ptr.scroll += ptr.lastY - ptrY;
+			while (abs(ptr.scroll) >= 22) {
+				mouse.wheel += Math.sign(ptr.scroll);
+				ptr.scroll -= 22 * Math.sign(ptr.scroll);
+			}
+		}
+		ptr.lastY = ptrY;
+		e.preventDefault();
+	});
+	const up = (e) => {
+		if (e.pointerId !== ptr.id) return;
+		ptr.id = null;
+		setPtr(e);
+		mouse.released = true;
+		mouse.tap = !ptr.moved;
+		if (mouse.touch) {
+			if (!ptr.moved) { ptr.prevTapMs = performance.now(); ptr.prevTapX = ptrX; ptr.prevTapY = ptrY; }
+			ptr.clearHover = true; // no hover once the finger has lifted
+		}
+	};
+	el.addEventListener('pointerup', up);
+	el.addEventListener('pointercancel', up);
+	el.addEventListener('pointerleave', (e) => { if ('mouse' === e.pointerType && null === ptr.id) ptrX = ptrY = -1; });
+	el.addEventListener('dblclick', () => { if (!mouse.touch) mouse.double = true; });
+	el.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+	el.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+}
+
 function mouseWheel(e) { mouse.wheel += e.delta; return false; }
 
 function over(x, y, w, h) {
-	return mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
+	return ptrX >= x && ptrX < x + w && ptrY >= y && ptrY < y + h;
 }
 
 function keyPressed() {
@@ -186,8 +247,16 @@ let waveDirty = true;
 let fileScroll = 0;
 
 function setup() {
-	createCanvas(windowWidth, windowHeight);
+	const cnv = createCanvas(windowWidth, windowHeight);
+	attachPointer(cnv.elt);
 	textFont('monospace');
+	// no browser scrolling, pinch zoom or double-tap zoom over the GUI: the
+	// window-level touch listeners are passive, so returning false can't stop them
+	document.documentElement.style.touchAction = 'none';
+	document.body.style.touchAction = 'none';
+	document.body.style.overscrollBehavior = 'none';
+	document.body.style.webkitUserSelect = 'none';
+	document.body.style.webkitTouchCallout = 'none';
 }
 
 function windowResized() {
@@ -219,8 +288,10 @@ function draw() {
 
 	if (mouse.released)
 		drag = null;
-	mouse.pressed = mouse.released = mouse.double = false;
+	mouse.pressed = mouse.released = mouse.double = mouse.tap = false;
 	mouse.wheel = 0;
+	if (ptr.clearHover && null === ptr.id) ptrX = ptrY = -1;
+	ptr.clearHover = false;
 }
 
 // --- header -----------------------------------------------------------------
@@ -293,11 +364,11 @@ function drawWaveform(x, y, w, h) {
 
 	// interaction: drag an edge, drag out a new region, click to seek,
 	// double-click for the whole clip
-	const t = constrain((mouseX - x) / w, 0, 1);
+	const t = constrain((ptrX - x) / w, 0, 1);
 	if (mouse.pressed && over(x, y, w, h)) {
-		if (abs(mouseX - xs) < 8) drag = { id: 'wave', mode: 'start' };
-		else if (abs(mouseX - xe) < 8) drag = { id: 'wave', mode: 'end' };
-		else drag = { id: 'wave', mode: 'new', anchor: t, x0: mouseX, moved: false };
+		if (abs(ptrX - xs) < 8) drag = { id: 'wave', mode: 'start' };
+		else if (abs(ptrX - xe) < 8) drag = { id: 'wave', mode: 'end' };
+		else drag = { id: 'wave', mode: 'new', anchor: t, x0: ptrX, moved: false };
 	}
 	if (drag && drag.id === 'wave') {
 		if ('start' === drag.mode) {
@@ -307,7 +378,7 @@ function drawWaveform(x, y, w, h) {
 			e = max(t, s + 0.001);
 			setVal('end', '/end', e);
 		} else {
-			if (abs(mouseX - drag.x0) > 4)
+			if (abs(ptrX - drag.x0) > 4)
 				drag.moved = true;
 			if (drag.moved) {
 				s = min(drag.anchor, t);
@@ -339,7 +410,7 @@ function drawWaveform(x, y, w, h) {
 	line(hx, y, hx, y + h);
 	noStroke();
 	if (over(x, y, w, h) && !drag) {
-		cursor(abs(mouseX - rs) < 8 || abs(mouseX - re) < 8 ? 'ew-resize' : 'crosshair');
+		cursor(abs(ptrX - rs) < 8 || abs(ptrX - re) < 8 ? 'ew-resize' : 'crosshair');
 	} else if (!drag)
 		cursor(ARROW);
 
@@ -437,11 +508,11 @@ function slider(id, x, y, w, label, value, toT, fromT, fmt, onSet, def) {
 
 	const hit = over(x - 6, y, w + 12, 32);
 	if (mouse.pressed && hit)
-		drag = { id: id, x0: mouseX, t0: t };
+		drag = { id: id, x0: ptrX, t0: t };
 	if (drag && drag.id === id) {
 		const nt = keyIsDown(SHIFT)
-			? drag.t0 + (mouseX - drag.x0) / w * 0.1
-			: (mouseX - x) / w;
+			? drag.t0 + (ptrX - drag.x0) / w * 0.1
+			: (ptrX - x) / w;
 		onSet(fromT(constrain(nt, 0, 1)));
 	}
 	if (hit && mouse.wheel)
@@ -630,7 +701,7 @@ function drawFiles(x, y, w, h) {
 		if (name.length > maxChars)
 			name = '…' + name.slice(name.length - maxChars + 1);
 		text(name, x + 10, ry + rowH / 2);
-		if (hover && mouse.pressed && !loading)
+		if (hover && (mouse.touch ? mouse.tap : mouse.pressed) && !loading)
 			send('/load', idx);
 	}
 	if (files.length > visible) {

@@ -90,6 +90,11 @@ project runs. It plays on out L only; patch out L into in R to stamp it.
 - **Sliders**: gain −36…+24 dB (a trim on top of normalise), crossfade
   2 ms–2 s. Drag, shift-drag for fine steps, wheel to nudge, double-click to
   reset.
+- **Touch and pencil** (iPad, phone): input comes from Pointer Events on the
+  canvas, so mouse, finger and Apple Pencil behave alike. A tap is a click,
+  a double tap a double-click, and a drag works as with the mouse. Swiping
+  the file list scrolls it, and a file loads on a tap, so a swipe doesn't
+  load the file under the finger. The page itself doesn't scroll or zoom.
 - **Meters**: in L, in R, out L (sampler), out R (stamp). Disk underruns, if any, are
   shown next to the file name.
 - **Panel** (display only): buttons 1–4 (layer, freeze, FFT size with its
