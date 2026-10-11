@@ -29,6 +29,12 @@ signals by about 10 dB. The codec goes down to −12 dB.
 Layer A is live. Hold button 1 to reach layer B; knobs pick up (they don't
 act until they reach the stored value) after every layer change.
 
+The knobs on this Pepper don't reach the top of the analog range: at full
+clockwise they read 0.87–0.96 depending on the knob. `Panel::kKnobTop` holds
+each knob's measured top, and readings are scaled by it so every knob spans
+0–1. Measure again (full CW, with the GUI's raw knob positions or
+`analogRead`) if the module or its knobs change.
+
 | Knob | Layer A | Layer B |
 |---|---|---|
 | 1 | drone gain (off → 0 dB at centre → +12 dB) | out R trim on top of the auto level (same curve) |

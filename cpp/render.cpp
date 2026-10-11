@@ -28,6 +28,8 @@ ahead of the read position, so it has one hop to finish.
 
 constexpr std::array<unsigned int, Panel::kButtons> Panel::kButtonPins;
 constexpr std::array<unsigned int, Panel::kLeds> Panel::kLedPins;
+constexpr std::array<float, Panel::kKnobs> Panel::kKnobTop;
+constexpr float Panel::kKnobTopMargin;
 
 enum Knob { kKnobDroneGain, kKnobFieldGain, kKnobWhiten, kKnobContrast, kKnobFloorOnly, kKnobRelease, kKnobTonality, kKnobWetDry };
 enum KnobB { kKnobOutGain, kKnobAttack, kKnobFloorSpeed, kKnobEventDb, kKnobDryBalance, kKnobCvSmooth, kKnobEventLo, kKnobEventHi };

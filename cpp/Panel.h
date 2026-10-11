@@ -17,6 +17,11 @@ public:
 	// digital channels, left to right as in the Pepper Pd examples
 	static constexpr std::array<unsigned int, kButtons> kButtonPins = {{ 15, 14, 13, 12 }};
 	static constexpr std::array<unsigned int, kLeds> kLedPins = {{ 6, 7, 10, 2, 3, 0, 1, 4, 5, 8 }};
+	// Analog reading of each knob at full clockwise, measured on this Pepper
+	// (2026-10-10; full counter-clockwise reads 0). Readings are divided by
+	// these, less a small margin so full clockwise reliably reaches 1.
+	static constexpr std::array<float, kKnobs> kKnobTop = {{ 0.963f, 0.888f, 0.906f, 0.869f, 0.908f, 0.894f, 0.917f, 0.896f }};
+	static constexpr float kKnobTopMargin = 0.005f;
 
 	void setup(BelaContext* context, const std::array<std::array<float, kKnobs>, kLayers>& defaults)
 	{
@@ -39,7 +44,7 @@ public:
 		// knobs
 		for(unsigned int c = 0; c < kKnobs && c < context->analogInChannels; ++c)
 		{
-			float raw = analogRead(context, 0, c);
+			float raw = std::min(1.f, analogRead(context, 0, c) / (kKnobTop[c] - kKnobTopMargin));
 			if(firstBlock)
 				smoothed[c] = raw;
 			float prev = smoothed[c];
