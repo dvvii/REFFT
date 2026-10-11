@@ -107,6 +107,9 @@ project runs. It plays on out L only; patch out L into in R to stamp it.
 - **Spectrum**: in R in 42 bands (100 Hz–12.8 kHz), each lit yellow by how
   much of it counts as events, with the event band (B7, B8) marked. Use it
   to set the band around the birds and leave out the frogs.
+- **Timer**: a performance stopwatch in large HH:MM:SS digits, with
+  start/stop and reset. It runs in the browser, tied to neither the board
+  nor the sampler, and starts stopped when the page loads.
 
 **Normalise and the limiter.** Field recordings peak at 0 dBFS from a few
 bumps while their ambience sits 25–55 dB lower, so scaling to the peak does

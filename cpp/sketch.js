@@ -281,6 +281,7 @@ function draw() {
 	my = drawPanel(mainX, my + PAD, mainW);
 	my = drawCv(mainX, my + PAD, mainW);
 	my = drawSpectrum(mainX, my + PAD, mainW);
+	my = drawTimer(mainX, my + PAD, mainW);
 	if (narrow)
 		drawFiles(PAD, my + PAD, listW, max(160, height - my - 2 * PAD));
 	else
@@ -638,6 +639,38 @@ function drawSpectrum(x, y, w) {
 	textAlign(LEFT, TOP);
 	text('in R spectrum · yellow = events · band ' + fmtHz(spectrum[0]) + '–' + fmtHz(spectrum[1]) + ' (B7, B8)', x + 6, y + 4);
 	return y + h + 16;
+}
+
+// Performance timer: a stopwatch in the browser, independent of the board
+// and the sampler. Starts stopped; as tall as the spectrum block.
+const timer = { running: false, startMs: 0, accMs: 0 };
+
+function timerMs() {
+	return timer.accMs + (timer.running ? performance.now() - timer.startMs : 0);
+}
+
+function drawTimer(x, y, w) {
+	const h = 96;
+	fill(C.panel); noStroke(); rect(x, y, w, h, 4);
+	const bw = min(130, w * 0.25), bh = (h - 3 * 8) / 2, bx = x + w - bw - 8;
+	if (button(bx, y + 8, bw, bh, timer.running ? 'stop' : 'start', timer.running)) {
+		if (timer.running) timer.accMs += performance.now() - timer.startMs;
+		else timer.startMs = performance.now();
+		timer.running = !timer.running;
+	}
+	if (button(bx, y + 16 + bh, bw, bh, 'reset', false)) {
+		timer.accMs = 0;
+		timer.startMs = performance.now();
+	}
+	const sec = floor(timerMs() / 1000);
+	const pad2 = (v) => String(v).padStart(2, '0');
+	const label = pad2(floor(sec / 3600)) + ':' + pad2(floor(sec / 60) % 60) + ':' + pad2(sec % 60);
+	const tw = bx - x - 16;
+	textSize(100);
+	textSize(min(h * 0.8, 100 * tw / textWidth(label)));
+	fill(timer.running ? C.text : C.dim); textAlign(CENTER, CENTER);
+	text(label, x + 8 + tw / 2, y + h / 2 + 2);
+	return y + h;
 }
 
 // CV outs 1-8 as 0-5 V bars
