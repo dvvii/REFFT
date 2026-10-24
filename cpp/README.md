@@ -95,6 +95,9 @@ project runs. It plays on out L only; patch out L into in R to stamp it.
   a double tap a double-click, and a drag works as with the mouse. Swiping
   the file list scrolls it, and a file loads on a tap, so a swipe doesn't
   load the file under the finger. The page itself doesn't scroll or zoom.
+  A touch that iPadOS ends without telling the page (a system swipe, the
+  screen locking, switching apps) is released by the next tap, so the GUI
+  never stays stuck on it.
 - **Meters**: in L, in R, out L (sampler), out R (stamp). Disk underruns, if any, are
   shown next to the file name.
 - **Panel** (display only): buttons 1–4 (layer, freeze, FFT size with its
@@ -109,7 +112,10 @@ project runs. It plays on out L only; patch out L into in R to stamp it.
   to set the band around the birds and leave out the frogs.
 - **Timer**: a performance stopwatch in large HH:MM:SS digits, with
   start/stop and reset. It runs in the browser, tied to neither the board
-  nor the sampler, and starts stopped when the page loads.
+  nor the sampler, and counts wall-clock time, so it keeps time while an
+  iPad sleeps. It survives the GUI reloading when the board reconnects or
+  the page is refreshed (it is kept per browser tab), and starts stopped in
+  a new tab.
 
 **Normalise and the limiter.** Field recordings peak at 0 dBFS from a few
 bumps while their ambience sits 25–55 dB lower, so scaling to the peak does

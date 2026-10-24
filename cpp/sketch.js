@@ -176,10 +176,24 @@ function setPtr(e) {
 	ptrY = e.clientY - r.top;
 }
 
+// End the held pointer, if any: the next frame drops its drag
+function release() {
+	if (null === ptr.id) return;
+	ptr.id = null;
+	mouse.released = true;
+	if (mouse.touch) ptr.clearHover = true; // no hover once the finger has lifted
+}
+
 function attachPointer(el) {
 	el.style.touchAction = 'none';
 	el.addEventListener('pointerdown', (e) => {
-		if (null !== ptr.id) return; // one pointer at a time
+		// one pointer at a time. A new primary pointer means every earlier
+		// touch has ended, so one still held is stale: iPadOS can swallow its
+		// pointerup and pointercancel (system gestures, lock, app switch)
+		if (null !== ptr.id) {
+			if (!e.isPrimary) return;
+			drag = null;
+		}
 		ptr.id = e.pointerId;
 		try { el.setPointerCapture(e.pointerId); } catch (err) {}
 		setPtr(e);
@@ -207,19 +221,21 @@ function attachPointer(el) {
 		ptr.lastY = ptrY;
 		e.preventDefault();
 	});
+	// only a real pointerup can be a tap; a cancelled or lost pointer just ends
 	const up = (e) => {
 		if (e.pointerId !== ptr.id) return;
-		ptr.id = null;
 		setPtr(e);
-		mouse.released = true;
-		mouse.tap = !ptr.moved;
-		if (mouse.touch) {
-			if (!ptr.moved) { ptr.prevTapMs = performance.now(); ptr.prevTapX = ptrX; ptr.prevTapY = ptrY; }
-			ptr.clearHover = true; // no hover once the finger has lifted
-		}
+		const tap = 'pointerup' === e.type && !ptr.moved;
+		release();
+		mouse.tap = tap;
+		if (mouse.touch && tap) { ptr.prevTapMs = performance.now(); ptr.prevTapX = ptrX; ptr.prevTapY = ptrY; }
 	};
 	el.addEventListener('pointerup', up);
 	el.addEventListener('pointercancel', up);
+	el.addEventListener('lostpointercapture', up);
+	// the page hidden or unfocused mid-touch may never see the touch end
+	document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
+	window.addEventListener('blur', release);
 	el.addEventListener('pointerleave', (e) => { if ('mouse' === e.pointerType && null === ptr.id) ptrX = ptrY = -1; });
 	el.addEventListener('dblclick', () => { if (!mouse.touch) mouse.double = true; });
 	el.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
@@ -264,7 +280,29 @@ function windowResized() {
 	waveDirty = true;
 }
 
+// An exception out of draw() stops p5's loop and freezes the page, so one
+// bad frame is logged (once per distinct message) and the next one drawn.
+let lastError = '';
+
 function draw() {
+	try {
+		drawFrame();
+	} catch (e) {
+		if (String(e) !== lastError) {
+			lastError = String(e);
+			console.error(e);
+		}
+	}
+
+	if (mouse.released)
+		drag = null;
+	mouse.pressed = mouse.released = mouse.double = mouse.tap = false;
+	mouse.wheel = 0;
+	if (ptr.clearHover && null === ptr.id) ptrX = ptrY = -1;
+	ptr.clearHover = false;
+}
+
+function drawFrame() {
 	readBuffers();
 	background(C.bg);
 
@@ -286,13 +324,6 @@ function draw() {
 		drawFiles(PAD, my + PAD, listW, max(160, height - my - 2 * PAD));
 	else
 		drawFiles(PAD, y, listW, height - y - PAD);
-
-	if (mouse.released)
-		drag = null;
-	mouse.pressed = mouse.released = mouse.double = mouse.tap = false;
-	mouse.wheel = 0;
-	if (ptr.clearHover && null === ptr.id) ptrX = ptrY = -1;
-	ptr.clearHover = false;
 }
 
 // --- header -----------------------------------------------------------------
@@ -314,9 +345,16 @@ function drawHeader(y) {
 
 // --- waveform ---------------------------------------------------------------
 
+// One offscreen image, redrawn in place. p5 keeps every createGraphics() in
+// the page until remove(), so making a new one per file or resize leaks a
+// canvas each time, and iPad Safari kills the page at its canvas memory cap.
 function renderWave(w, h) {
-	wave = createGraphics(w, h);
-	wave.pixelDensity(1);
+	if (!wave || wave.width !== w || wave.height !== h) {
+		if (wave)
+			wave.remove();
+		wave = createGraphics(w, h);
+		wave.pixelDensity(1);
+	}
 	wave.background(C.panel);
 	wave.stroke(C.wave);
 	const bins = (peaks.length - 1) / 2;
@@ -642,11 +680,34 @@ function drawSpectrum(x, y, w) {
 }
 
 // Performance timer: a stopwatch in the browser, independent of the board
-// and the sampler. Starts stopped; as tall as the spectrum block.
-const timer = { running: false, startMs: 0, accMs: 0 };
+// and the sampler. As tall as the spectrum block. Wall-clock time, since
+// performance.now() can stand still while an iPad sleeps; kept in
+// sessionStorage because Bela's GUI page reloads the sketch whenever its
+// connection to the board comes back. Starts stopped in a new tab.
+const TIMER_KEY = 'refft-timer';
+const timer = loadTimer();
+
+function loadTimer() {
+	try {
+		const t = JSON.parse(sessionStorage.getItem(TIMER_KEY));
+		if (t && 'number' === typeof t.startMs && 'number' === typeof t.accMs)
+			return { running: !!t.running, startMs: t.startMs, accMs: t.accMs };
+	} catch (e) {
+		// no storage: start afresh
+	}
+	return { running: false, startMs: 0, accMs: 0 };
+}
+
+function saveTimer() {
+	try {
+		sessionStorage.setItem(TIMER_KEY, JSON.stringify(timer));
+	} catch (e) {
+		// no storage: the timer still runs, it just won't survive a reload
+	}
+}
 
 function timerMs() {
-	return timer.accMs + (timer.running ? performance.now() - timer.startMs : 0);
+	return max(0, timer.accMs + (timer.running ? Date.now() - timer.startMs : 0));
 }
 
 function drawTimer(x, y, w) {
@@ -654,13 +715,15 @@ function drawTimer(x, y, w) {
 	fill(C.panel); noStroke(); rect(x, y, w, h, 4);
 	const bw = min(130, w * 0.25), bh = (h - 3 * 8) / 2, bx = x + w - bw - 8;
 	if (button(bx, y + 8, bw, bh, timer.running ? 'stop' : 'start', timer.running)) {
-		if (timer.running) timer.accMs += performance.now() - timer.startMs;
-		else timer.startMs = performance.now();
+		if (timer.running) timer.accMs += Date.now() - timer.startMs;
+		else timer.startMs = Date.now();
 		timer.running = !timer.running;
+		saveTimer();
 	}
 	if (button(bx, y + 16 + bh, bw, bh, 'reset', false)) {
 		timer.accMs = 0;
-		timer.startMs = performance.now();
+		timer.startMs = Date.now();
+		saveTimer();
 	}
 	const sec = floor(timerMs() / 1000);
 	const pad2 = (v) => String(v).padStart(2, '0');
