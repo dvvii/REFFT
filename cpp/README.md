@@ -26,6 +26,7 @@ signals by about 10 dB. The codec goes down to −12 dB.
 
 ## Knobs / CV in
 
+Knobs and CVs are numbered 0–7, as on the Pepper faceplate and in the GUI.
 Layer A is live. Hold button 1 to reach layer B; knobs pick up (they don't
 act until they reach the stored value) after every layer change.
 
@@ -37,14 +38,14 @@ each knob's measured top, and readings are scaled by it so every knob spans
 
 | Knob | Layer A | Layer B |
 | --- | --- | --- |
-| 1 | drone gain (off → 0 dB at centre → +12 dB) | out R gain (off, then −24…+24 dB; 0 dB at centre) |
-| 2 | field gain (off → 0 dB at centre → +12 dB) | mask attack (0–2 s) |
-| 3 | **whiten**: product (0) → full magnitude transfer (1) | floor tracker speed (0.5–30.5 dB/s) |
-| 4 | **contrast**: drone mask exponent 0.5–4 (1 at about 1/3) | event threshold (3–30 dB above floor) |
-| 5 | **floor only**: stamp only the field's noise floor, pass events | dry source: field (0) → drone (1) |
-| 6 | **smear**: mask release (0–5 s) | CV out smoothing (1 ms–0.5 s) |
-| 7 | **tonality**: field phase (0) → drone phase (1) | event band edge (100 Hz–12.8 kHz, 2 kHz) |
-| 8 | wet/dry | event band edge (same range, 10 kHz) |
+| 0 | drone gain (off → 0 dB at centre → +12 dB) | out R gain (off, then −24…+24 dB; 0 dB at centre) |
+| 1 | field gain (off → 0 dB at centre → +12 dB) | mask attack (0–2 s) |
+| 2 | **whiten**: product (0) → full magnitude transfer (1) | floor tracker speed (0.5–30.5 dB/s) |
+| 3 | **contrast**: drone mask exponent 0.5–4 (1 at about 1/3) | event threshold (3–30 dB above floor) |
+| 4 | **floor only**: stamp only the field's noise floor, pass events | dry source: field (0) → drone (1) |
+| 5 | **smear**: mask release (0–5 s) | CV out smoothing (1 ms–0.5 s) |
+| 6 | **tonality**: field phase (0) → drone phase (1) | event band edge (100 Hz–12.8 kHz, 2 kHz) |
+| 7 | wet/dry | event band edge (same range, 10 kHz) |
 
 ## Buttons
 
@@ -101,14 +102,14 @@ project runs. It plays on out L only; patch out L into in R to stamp it.
 - **Meters**: in L, in R, out L (sampler), out R (stamp). Disk underruns, if any, are
   shown next to the file name.
 - **Panel** (display only): buttons 1–4 (layer, freeze, FFT size with its
-  latency and the stamp's whiten make-up gain, bypass) and the stored value of every knob on both layers, in the
+  latency, bypass) and the stored value of every knob on both layers, in the
   units of the table above. The live layer is lit, and the knob being turned
   is yellow. A knob waiting for pickup reads "turn to …", with an orange tick
   at the physical knob's position.
 - **CV outs**: the eight outputs as 0–5 V bars, labelled as in the CV out
   list below.
 - **Spectrum**: in R in 42 bands (100 Hz–12.8 kHz), each lit yellow by how
-  much of it counts as events, with the event band (B7, B8) marked. Use it
+  much of it counts as events, with the event band (B6, B7) marked. Use it
   to set the band around the birds and leave out the frogs.
 - **Timer**: a performance stopwatch in large HH:MM:SS digits, with
   start/stop and reset. It runs in the browser, tied to neither the board
@@ -142,14 +143,16 @@ without a browser. Delete the file to start from defaults.
 
 ## CV out (0–1 → 0–5 V)
 
-1. drone level (−60…0 dB)
-2. field level
-3. field noisiness (spectral flatness, 100 Hz–10 kHz)
-4. field brightness (centroid, 100 Hz–4 kHz, log)
-5. onset gate from the field's event band (spectral flux, 20 ms)
-6. event amount (share of the event band's energy above its tracked floor)
-7. wet level
-8. drone brightness (centroid)
+Numbered 0–7, as on the Pepper faceplate and in the GUI.
+
+0. drone level (−60…0 dB)
+1. field level
+2. field noisiness (spectral flatness, 100 Hz–10 kHz)
+3. field brightness (centroid, 100 Hz–4 kHz, log)
+4. onset gate from the field's event band (spectral flux, 20 ms)
+5. event amount (share of the event band's energy above its tracked floor)
+6. wet level
+7. drone brightness (centroid)
 
 ## How the stamp works
 
@@ -211,7 +214,7 @@ through; the noise only provides texture.
 
 The drone magnitude `md = |D[k]|` becomes a per-bin **mask**:
 
-1. **Contrast** (knob A4, exponent `c = 0.5·8^v`, 0.5…4, 1 at about 1/3):
+1. **Contrast** (knob A3, exponent `c = 0.5·8^v`, 0.5…4, 1 at about 1/3):
 
        md = peak · (md / peak)^c
 
@@ -224,7 +227,7 @@ The drone magnitude `md = |D[k]|` becomes a per-bin **mask**:
 
        mask[k] += coef · (md − mask[k])     coef = attack if md > mask[k], else release
 
-   Attack is knob B2 (τ = 2v² s), release is the **smear** knob A6
+   Attack is knob B1 (τ = 2v² s), release is the **smear** knob A5
    (τ = 5v² s). The coefficients are computed from the hop length, so the
    times are the same at every FFT size. Long release keeps partials ringing
    after the drone moves: spectral sustain.
@@ -234,7 +237,7 @@ The drone magnitude `md = |D[k]|` becomes a per-bin **mask**:
 ### 4. Whitening the carrier: the whiten knob
 
 The core of the stamp. `mc = |C[k]|`, threshold `T = 10^((−6 − 94·v)/20)`,
-so knob A3 moves `T` from −6 dB (v = 0) down to −100 dB (v = 1):
+so knob A2 moves `T` from −6 dB (v = 0) down to −100 dB (v = 1):
 
     stamped = mask[k] · 1            if mc > T    (carrier level discarded)
     stamped = mask[k] · mc / T       if mc ≤ T    (carrier level kept)
@@ -265,10 +268,13 @@ Working through the extremes:
   out. Because noise bins drop 3 dB per FFT size step, the crossover moves
   a little when you change size.
 
-Left alone, this made whiten a level control for the wet path as well:
-with a quiet field the product end sat 40–80 dB below the transfer end.
-Static compensation (step 7) takes most of that out, so whiten and
-contrast change the character of the stamp rather than its loudness.
+So whiten is also a level control for the wet path: towards 0 the stamp
+follows the recording's own level, and with a quiet field the product end
+sits 40–80 dB below the transfer end. That is deliberate. An earlier
+version made it up with a gain referenced to the carrier's level over
+10 s; when the recording stopped, that gain climbed to lift the codec's
+hiss to the drone's level, and when it came back, out R's limiter took up
+to 43 dB off for some 17 s (measured on the board).
 
 ### 5. Floor tracking and "floor only"
 
@@ -276,7 +282,7 @@ Each carrier bin has a smoothed level `lv` (its power through a 50 ms
 one-pole, square-rooted) and a noise-floor estimate `fl` of that level:
 
     if lv < fl:  fl = lv                       (follow drops at once)
-    else:        fl = fl · rise                (creep up by B3 dB/s, 0.5…30.5)
+    else:        fl = fl · rise                (creep up by B2 dB/s, 0.5…30.5)
 
 This is a minimum tracker: it sits at the low edge of the noise
 fluctuation, not at its average. The smoothing narrows that fluctuation;
@@ -285,18 +291,18 @@ each noise bin, 15–20 dB under its average, so plain noise read as events.
 Typical noise frames still read a few dB above the floor, so the event
 threshold needs to sit well above 0 dB.
 
-Only bins in the **event band** (B7 and B8 set its edges, either way round;
+Only bins in the **event band** (B6 and B7 set its edges, either way round;
 default 2–10 kHz) can be events, with half-octave tapers outside it. In the
 Calanoa recordings the frogs sit around 350–500 Hz and the birds above
 2 kHz, so the default band leaves the frog chorus to the floor.
 
 How far a bin is above its floor, `above = 20·log10(mc / fl)`, becomes an
 **event** amount, a soft gate 12 dB wide centred on the event threshold `E`
-(knob B4, 3…30 dB, about 12 dB at its default), weighted by the band:
+(knob B3, 3…30 dB, about 12 dB at its default), weighted by the band:
 
     event = band(f) · clamp((above − (E − 6)) / 12, 0, 1)
 
-The **floor only** knob (A5) blends each bin between stamped and untouched:
+The **floor only** knob (A4) blends each bin between stamped and untouched:
 
     w   = 1 − floorOnly · event
     mag = stamped · w + mc · (1 − w)
@@ -305,14 +311,14 @@ At `floorOnly = 0` every bin is stamped. At `floorOnly = 1`, bins in the
 event band where something stands out of the noise (a bird call) keep the
 recording's own magnitude, and because they also keep its phase, those
 sounds pass through the wet path unchanged (delayed by the latency). Only
-the steady noise bed is replaced by the drone. The rise speed (B3) decides
+the steady noise bed is replaced by the drone. The rise speed (B2) decides
 how quickly the floor catches up after a quiet moment: slow makes long
 events stay "events" longer, fast absorbs them into the floor.
 
 ### 6. Phase and tonality
 
 The carrier phasor `u = C[k] / |C[k]|` (unit length) normally gives the
-output its phase. The **tonality** knob (A7, `t`) blends it with the drone's
+output its phase. The **tonality** knob (A6, `t`) blends it with the drone's
 phasor `d = D[k] / |D[k]|` and renormalises:
 
     b = (1 − t)·u + t·d,   phase = b / |b|
@@ -337,37 +343,24 @@ phasor `d = D[k] / |D[k]|` and renormalises:
   sum of the squared windows at overlap 4. A steady signal at full transfer
   therefore comes out at the level of the mask: a −6 dB drone partial gives a
   −6 dB output partial.
-- **Level compensation** is static, with nothing that follows the carrier
-  from frame to frame. An earlier version scaled each frame to the carrier's
-  power smoothed over 0.4 s. With dense birdsong (the 5am recording) that
-  pumped: every call pulled the drone up and down with it. Two fixed gains
-  replace it:
-  - **Contrast** (A4) scales the sharpened mask back to the drone's own
-    power, so sharpening partials doesn't also turn the stamp down.
-  - **Whiten make-up**: bins below the whiten threshold are a spectral
-    product (carrier × drone), so their level depends on the carrier's.
-    They get `threshold − ref − 6` dB of make-up (0…60 dB, shown in the GUI
-    next to the FFT size). `ref` is the carrier's mean bin power, averaged
-    in dB over 10 s, so one bird call barely moves it. A carrier at its
-    usual level then lands 6 dB under the drone.
-
-  The wet level therefore follows the drone (A1), not the recording. In a
-  model using the 5am recording and a −15 dBFS drone, it stayed between −16
-  and −23 dBFS across the whole A3 × A4 range, at carrier levels of both
-  −26 and −45 dBFS. The swing of the 100 ms level with whiten up (the drone
-  alone) fell from 3.5 dB under level matching to 0.3–1.5 dB. With whiten
-  down, the stamp follows the birds as the recording does, and their peaks
-  go to the out R limiter.
+- **Level**: nothing follows the carrier's level to correct it. Earlier
+  versions scaled each frame to the carrier's power (that pumped with dense
+  birdsong), then made up the product's level over 10 s (that turned
+  silences into hiss at full level, see step 4). What remains is one fixed
+  gain: **contrast** (A3) scales the sharpened mask back to the drone's own
+  power, so sharpening partials doesn't also turn the stamp down. With
+  whiten up the wet level follows the drone (A0); with whiten down it
+  follows the recording, and its peaks go to the out R limiter.
 
 ### 8. Mix and output (render.cpp)
 
-- **Wet/dry** (A8) is an equal-power crossfade: `wet · sin(v·π/2)` +
+- **Wet/dry** (A7) is an equal-power crossfade: `wet · sin(v·π/2)` +
   `dry · cos(v·π/2)`.
 - The dry signal is itself a blend between field and drone (**dry source**,
-  B5, also equal-power), so out R can be the stamped texture over the
+  B4, also equal-power), so out R can be the stamped texture over the
   original recording or over the drone; fully wet it is the stamp alone.
 - **Bypass** (button 4) fades out R to the dry signal over about 10 ms.
-- **Output gain** (B1) applies to out R: off at the bottom, then −24…+24 dB
+- **Output gain** (B0) applies to out R: off at the bottom, then −24…+24 dB
   linear in dB, 0 dB at centre. The stamp sits near the drone's level, and
   the limiter holds the peaks, so this knob takes it up to modular level.
 - **Limiter**: out R then goes through the same lookahead limiter as the
@@ -390,9 +383,9 @@ recording unless noted:
   4 kHz (where these recordings sit; it measures over 100 Hz…10 kHz). Pink noise reads mid-scale, white noise near the top, brown noise
   near the bottom. (A magnitude-weighted mean of linear frequency put
   almost everything near the top, as most bins are high.) The drone gets
-  one too (CV 8).
+  one too (CV 7).
 - **Flux**: the sum of bin magnitude increases since the last frame, in the
-  event band, divided by the band's total magnitude. The onset gate (CV 5) fires for 20 ms
+  event band, divided by the band's total magnitude. The onset gate (CV 4) fires for 20 ms
   when flux exceeds twice its running average plus 0.02.
 - **Event amount**: the magnitude-weighted average of `event` from step 5
   over the event band, i.e. how much of the band currently stands out of
@@ -400,7 +393,7 @@ recording unless noted:
 - **Levels**: RMS of each input frame (after the gain knobs) and the
   envelope of the wet output, on a −60…0 dB scale.
 
-All CV outs except the gate are smoothed by the CV smoothing knob (B6).
+All CV outs except the gate are smoothed by the CV smoothing knob (B5).
 Below −60 dB, where the level CVs read 0, noisiness, brightness, the onset
 gate and the event amount fade to 0 over 6 dB (drone brightness follows the
 drone's level): at that point they would only describe the codec's noise.
@@ -414,7 +407,7 @@ drone's level): at that point they would only describe the codec's noise.
   crossover in step 4).
 - Same setup, raise tonality: the partial goes from breath to tone.
 - A recording with birds or voices, floor only at 1: the noise bed becomes
-  drone, the events stay. Sweep the event threshold (B4) to decide what
+  drone, the events stay. Sweep the event threshold (B3) to decide what
   counts as an event.
 - Freeze a rich drone moment, then change the drone: the frozen spectrum
   keeps playing through the recording.
@@ -444,6 +437,9 @@ drone's level): at that point they would only describe the codec's noise.
 - `render.cpp`: I/O, parameter mapping, features to CV. The spectral work runs
   in an auxiliary task (priority 90) on another core; it overlap-adds one hop
   ahead of the audio read position. Latency is FFT size + hop (58 ms at 2048).
+- `../offline/`: the same `Stamp.cpp` on the desktop, through a copy of
+  `render.cpp`'s signal path: renders, self-checks and a kit of test
+  signals. `LISTENING.md` is a course in hearing each stage with them.
 
 ## Build and run
 

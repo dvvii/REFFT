@@ -25,7 +25,7 @@ const ST = {
 	listId: 14, channels: 15, peakDb: 16, analysed: 17, play: 18, underruns: 19,
 	meters: 20, layer: 24, freeze: 25, fft: 26, bypass: 27, touched: 28,
 	knobs: 29, picked: 45, pots: 61, cv: 69, medianDb: 77, normDb: 78, limitDb: 79,
-	makeupDb: 80, limitRDb: 81, size: 82,
+	limitRDb: 80, size: 81,
 };
 const METERS = ['in L (drone)', 'in R (field)', 'out L (sampler)', 'out R (stamp)'];
 const CHANNELS = ['mix', 'L', 'R'];
@@ -595,7 +595,7 @@ function drawPanel(x, y, w) {
 	const chips = [
 		['1 shift', layer > 0.5 ? 'layer B' : 'layer A', layer > 0.5],
 		['2 freeze', board[ST.freeze] > 0.5 ? 'frozen' : 'off', board[ST.freeze] > 0.5],
-		['3 FFT · make-up', board[ST.fft] + ' (' + (1000 * board[ST.fft] * 1.25 / 44100).toFixed(0) + ' ms) · ' + fmtDb(board[ST.makeupDb]), false],
+		['3 FFT', board[ST.fft] + ' (' + (1000 * board[ST.fft] * 1.25 / 44100).toFixed(0) + ' ms)', false],
 		['4 bypass', board[ST.bypass] > 0.5 ? 'bypassed' : 'off', board[ST.bypass] > 0.5],
 	];
 	const share = [1, 1, 1.8, 1];
@@ -625,7 +625,7 @@ function drawPanel(x, y, w) {
 			const waiting = live && board[ST.picked + 8 * l + k] < 0.5;
 			const hot = live && touched === k && !waiting;
 			fill(live ? C.dim : C.line); textSize(9); textAlign(CENTER, TOP);
-			text((l ? 'B' : 'A') + (k + 1) + (def ? ' ' + def[0] : ''), x + k * kw + 2, y + 3, kw - 4, 12);
+			text((l ? 'B' : 'A') + k + (def ? ' ' + def[0] : ''), x + k * kw + 2, y + 3, kw - 4, 12);
 			if (!def)
 				continue;
 			const r = min(14, kw / 2 - 6);
@@ -650,7 +650,7 @@ function drawPanel(x, y, w) {
 }
 
 // The field (in R) per display band: level bars, lit by how much of the band
-// counts as events; the event band (B7, B8) is the bright strip.
+// counts as events; the event band (B6, B7) is the bright strip.
 function drawSpectrum(x, y, w) {
 	if (!spectrum || spectrum.length < 2 + 2 * 42)
 		return y;
@@ -675,7 +675,7 @@ function drawSpectrum(x, y, w) {
 	for (const hz of [100, 200, 500, 1000, 2000, 5000, 10000])
 		text(fmtHz(hz), xOf(hz), y + h + 3);
 	textAlign(LEFT, TOP);
-	text('in R spectrum · yellow = events · band ' + fmtHz(spectrum[0]) + '–' + fmtHz(spectrum[1]) + ' (B7, B8)', x + 6, y + 4);
+	text('in R spectrum · yellow = events · band ' + fmtHz(spectrum[0]) + '–' + fmtHz(spectrum[1]) + ' (B6, B7)', x + 6, y + 4);
 	return y + h + 16;
 }
 
@@ -747,7 +747,7 @@ function drawCv(x, y, w) {
 		const v = constrain(board[ST.cv + c], 0, 1);
 		const bx = x + c * cw + 8, bw = cw - 16;
 		fill(C.dim); textSize(9); textAlign(CENTER, TOP);
-		text('CV' + (c + 1) + ' ' + CVS[c], x + c * cw + 2, y + 3, cw - 4, 12);
+		text('CV' + c + ' ' + CVS[c], x + c * cw + 2, y + 3, cw - 4, 12);
 		fill(C.bg); rect(bx, y + 16, bw, h - 16, 2);
 		fill(4 === c ? (v > 0.5 ? C.head : C.line) : C.accent);
 		rect(bx, y + h - v * (h - 16), bw, v * (h - 16), 2);

@@ -35,7 +35,6 @@ struct StampFeatures {
 	float fieldFlux = 0;     // positive spectral change in the event band, normalised
 	float eventAmount = 0;   // energy-weighted share of the event band above the floor
 	float droneCentroid = 0; // Hz
-	float makeupDb = 0;      // whiten make-up gain applied to the stamped bins
 	std::array<float, kDisplayBands> bandDb {};    // carrier power per display band
 	std::array<float, kDisplayBands> bandEvent {}; // its event share (band-weighted)
 };
@@ -70,18 +69,6 @@ private:
 	std::array<SizeData, kSizes.size()> sizes;
 	unsigned int sizeIdx = 1;
 	float sampleRate = 44100;
-	// Static level compensation. Without it the wet level moved over 80 dB
-	// with whiten and contrast. Contrast keeps the drone mask at the drone's
-	// own power. Below the whiten threshold the stamp is a spectral product
-	// (carrier times drone), so those bins get make-up gain referenced to the
-	// carrier's mean bin level over kRefSec: slow enough that a birdcall
-	// doesn't move it, so nothing pumps. Peaks go to the limiter on out R.
-	static constexpr float kRefSec = 10.f;
-	static constexpr float kRefHeadroomDb = 6.f; // product sits this far under the drone
-	static constexpr float kMakeupMaxDb = 60.f;
-	float refDb = 0;
-	bool refValid = false;
-
 	std::vector<float> mask;     // smoothed drone magnitudes
 	std::vector<float> levelSm;  // carrier magnitudes, smoothed over ~50 ms (power)
 	std::vector<float> floorEst; // tracked carrier noise floor, of levelSm

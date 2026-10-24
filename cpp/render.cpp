@@ -34,7 +34,7 @@ constexpr float Panel::kKnobTopMargin;
 enum Knob { kKnobDroneGain, kKnobFieldGain, kKnobWhiten, kKnobContrast, kKnobFloorOnly, kKnobRelease, kKnobTonality, kKnobWetDry };
 enum KnobB { kKnobOutGain, kKnobAttack, kKnobFloorSpeed, kKnobEventDb, kKnobDryBalance, kKnobCvSmooth, kKnobEventLo, kKnobEventHi };
 enum Button { kButtonShift, kButtonFreeze, kButtonSize, kButtonBypass };
-enum Feature { kFeatDrone, kFeatField, kFeatFlatness, kFeatCentroid, kFeatFlux, kFeatEvents, kFeatDroneCentroid, kFeatMakeupDb, kNumFeatures };
+enum Feature { kFeatDrone, kFeatField, kFeatFlatness, kFeatCentroid, kFeatFlux, kFeatEvents, kFeatDroneCentroid, kNumFeatures };
 
 static constexpr unsigned int kBufSize = 32768; // power of two, > 2 * max FFT size
 static constexpr unsigned int kBufMask = kBufSize - 1;
@@ -119,7 +119,7 @@ enum GuiStatus {
 	kStPicked = kStKnobs + Panel::kLayers * Panel::kKnobs,
 	kStPots = kStPicked + Panel::kLayers * Panel::kKnobs,
 	kStCv = kStPots + Panel::kKnobs,
-	kStMedianDb = kStCv + 8, kStNormDb, kStLimitDb, kStMakeupDb, kStLimitRDb,
+	kStMedianDb = kStCv + 8, kStNormDb, kStLimitDb, kStLimitRDb,
 	kStSize
 };
 static std::atomic<bool> gGuiSync {true};
@@ -233,7 +233,6 @@ static void sendGui(BelaContext* context)
 		st[kStMedianDb] = analysed ? c->medianDb.load() : -180;
 		st[kStNormDb] = analysed ? c->normDb.load() : 0;
 		st[kStLimitDb] = gLimitPeakDb;
-		st[kStMakeupDb] = gFeatures[kFeatMakeupDb];
 		st[kStLimitRDb] = gLimitRPeakDb;
 		gLimitRPeakDb = 0;
 		gLimitPeakDb = 0;
@@ -324,7 +323,6 @@ static void stampTask(void*)
 	gFeatures[kFeatFlux] = f.fieldFlux;
 	gFeatures[kFeatEvents] = f.eventAmount;
 	gFeatures[kFeatDroneCentroid] = f.droneCentroid;
-	gFeatures[kFeatMakeupDb] = f.makeupDb;
 	for(unsigned int b = 0; b < kDisplayBands; ++b)
 	{
 		gBandDb[b] = f.bandDb[b];
@@ -361,7 +359,7 @@ bool setup(BelaContext* context, void* userData)
 
 	std::array<std::array<float, Panel::kKnobs>, Panel::kLayers> defaults {};
 	defaults[0] = {{ 0.5f, 0.5f, 0.7f, 0.33f, 0.f, 0.f, 0.f, 0.5f }};
-	// B7, B8: event band 2…10 kHz
+	// B6, B7: event band 2…10 kHz
 	defaults[1] = {{ 0.5f, 0.f, 0.3f, 0.33f, 0.f, 0.3f, 0.6174f, 0.9491f }};
 	gPanel.setup(context, defaults);
 	gScope.setup(4, context->audioSampleRate);

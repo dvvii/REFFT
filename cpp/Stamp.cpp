@@ -4,9 +4,6 @@
 
 constexpr unsigned int Stamp::kOverlap;
 constexpr std::array<unsigned int, 4> Stamp::kSizes;
-constexpr float Stamp::kRefSec;
-constexpr float Stamp::kRefHeadroomDb;
-constexpr float Stamp::kMakeupMaxDb;
 
 static inline float dbToLin(float db) { return powf(10.f, db / 20.f); }
 
@@ -62,7 +59,6 @@ void Stamp::setSizeIndex(unsigned int idx)
 	std::fill(levelSm.begin(), levelSm.end(), 0.f);
 	std::fill(floorEst.begin(), floorEst.end(), 0.f);
 	std::fill(prevMag.begin(), prevMag.end(), 0.f);
-	refValid = false;
 }
 
 void Stamp::processFrame(const float* drone, const float* field, float* out,
@@ -98,7 +94,6 @@ void Stamp::processFrame(const float* drone, const float* field, float* out,
 
 	// Contrast relative to the frame peak, scaled back to the drone's power
 	// so that sharpening partials doesn't also turn the stamp down.
-	float carrierBinPow = 0;
 	{
 		float rawPow = 0, shapedPow = 0;
 		for(unsigned int k = 1; k < K; ++k)
@@ -109,32 +104,18 @@ void Stamp::processFrame(const float* drone, const float* field, float* out,
 			shaped[k] = md;
 			rawPow += magDrone[k] * magDrone[k];
 			shapedPow += md * md;
-			carrierBinPow += magField[k] * magField[k];
 		}
 		shaped[0] = 0;
 		const float g = shapedPow > 1e-24f ? sqrtf(rawPow / shapedPow) : 1.f;
 		for(unsigned int k = 1; k < K; ++k)
 			shaped[k] *= g;
-		carrierBinPow /= K - 1;
 	}
 
 	// Below this carrier magnitude the whitening gain is capped, so the
-	// result fades from magnitude transfer towards a spectral product.
+	// result fades from magnitude transfer towards a spectral product, which
+	// follows the carrier's own level: a quiet recording stamps quietly.
 	const float threshDb = -6.f - p.whiten * 94.f;
 	const float thresh = dbToLin(threshDb);
-	// The product scales with the carrier's level: make-up gain brings a
-	// carrier at its long-term mean bin level up to the drone, less headroom.
-	const float binDb = 10.f * log10f(carrierBinPow + 1e-24f);
-	if(!refValid)
-	{
-		refDb = binDb;
-		refValid = carrierBinPow > 1e-24f;
-	}
-	else
-		refDb += (1.f - expf(-frameSec / kRefSec)) * (binDb - refDb);
-	const float makeupDb = std::min(kMakeupMaxDb, std::max(0.f, threshDb - refDb - kRefHeadroomDb));
-	const float makeup = dbToLin(makeupDb);
-	f.makeupDb = makeupDb;
 	const float floorRise = dbToLin(p.floorRiseDb * frameSec);
 	const float levelCoef = 1.f - expf(-frameSec / 0.05f);
 	const float eventLo = p.eventDb - 6.f;
@@ -204,7 +185,7 @@ void Stamp::processFrame(const float* drone, const float* field, float* out,
 			}
 		}
 
-		float stamped = mask[k] * (mc > thresh ? 1.f : mc / thresh) * makeup;
+		float stamped = mask[k] * (mc > thresh ? 1.f : mc / thresh);
 		float mag = stamped * stampW + mc * (1.f - stampW);
 		if(0 == k)
 			mag = 0; // no DC
