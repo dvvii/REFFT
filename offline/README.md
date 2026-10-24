@@ -1,14 +1,14 @@
 # REFFT offline
 
-The stamp on the desktop: the board's own `cpp/Stamp.cpp` and
-`cpp/Limiter.cpp`, compiled against a portable stand-in for Bela's `Fft`
+The stamp on the desktop: the board's own `Stamp.cpp` and `Limiter.cpp`
+(in the repo root), compiled against a portable stand-in for Bela's `Fft`
 (`include/libraries/Fft/Fft.h`), driven through a copy of `render.cpp`'s
 signal path (`engine.h`). Three tools:
 
 - `refft-render`: renders a drone and a field (files or test signals) to a
   WAV file with any knob settings, sweeps or ramps, and prints levels and
   features as it goes. For listening at the desk and A/B comparisons.
-- `refft-check`: the predictions in `cpp/LISTENING.md`, measured. Each
+- `refft-check`: the predictions in `LISTENING.md`, measured. Each
   line prints the number next to what it expects; `obs` lines measure
   behaviour without a verdict.
 - `refft-gen`: writes the listening kit: field signals for the board's

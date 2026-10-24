@@ -1,1 +1,7 @@
 .DS_Store
+
+# the sampler on the board
+sampler.cfg
+sampler.cfg.tmp
+samples/
+.cache/

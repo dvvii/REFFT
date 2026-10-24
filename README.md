@@ -1,4 +1,4 @@
-# REFFT (C++)
+# REFFT
 
 Real-time timbre stamp for Pepper, running on a PocketBeagle 2 with a classic
 Bela rev C cape. Used in Errant Timbres.
@@ -7,6 +7,8 @@ The field recording keeps its phase and noise; the drone supplies the
 magnitude of every FFT bin. Noisy recordings take on the drone's harmonics as
 a background layer. Per-bin, with no spectral-envelope smoothing, so it does
 not behave like a vocoder.
+
+The original Pure Data version is kept, retired, in `archive/pd/`.
 
 ## I/O
 
@@ -437,14 +439,19 @@ drone's level): at that point they would only describe the codec's noise.
 - `render.cpp`: I/O, parameter mapping, features to CV. The spectral work runs
   in an auxiliary task (priority 90) on another core; it overlap-adds one hop
   ahead of the audio read position. Latency is FFT size + hop (58 ms at 2048).
-- `../offline/`: the same `Stamp.cpp` on the desktop, through a copy of
+- `offline/`: the same `Stamp.cpp` on the desktop, through a copy of
   `render.cpp`'s signal path: renders, self-checks and a kit of test
   signals. `LISTENING.md` is a course in hearing each stage with them.
 
 ## Build and run
 
+From the repo root. `offline/` and `archive/` stay on the desktop: Bela
+builds every `.cpp` anywhere under the project folder, and the offline
+tools each have their own `main()`; the Pd archive isn't needed there.
+
 ```sh
-rsync -a --exclude build --exclude sampler.cfg --exclude samples ./ bbb:Bela/projects/refft-cpp/
+rsync -a --exclude .git --exclude .gitignore --exclude .DS_Store --exclude offline --exclude archive \
+    --exclude build --exclude sampler.cfg --exclude samples --exclude .cache ./ bbb:Bela/projects/refft-cpp/
 ssh bbb 'make -C ~/Bela PROJECT=refft-cpp run'
 ```
 

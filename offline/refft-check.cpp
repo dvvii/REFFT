@@ -470,7 +470,7 @@ static void floorOnly()
 
 int main()
 {
-	printf("REFFT self-checks: cpp/Stamp.cpp through the render.cpp signal path, at 44.1 kHz\n");
+	printf("REFFT self-checks: Stamp.cpp through the render.cpp signal path, at 44.1 kHz\n");
 	level();
 	pitch();
 	whiten();

@@ -5,10 +5,10 @@
 
 CXX ?= c++
 CXXFLAGS ?= -O2 -g
-CXXFLAGS += -std=c++14 -Wall -Wextra -Wno-unused-parameter -Iinclude -I../cpp -I.
+CXXFLAGS += -std=c++14 -Wall -Wextra -Wno-unused-parameter -Iinclude -I.. -I.
 
-STAMP = ../cpp/Stamp.cpp ../cpp/Limiter.cpp
-HEADERS = engine.h knobs.h signals.h wav.h include/libraries/Fft/Fft.h ../cpp/Stamp.h ../cpp/Limiter.h
+STAMP = ../Stamp.cpp ../Limiter.cpp
+HEADERS = engine.h knobs.h signals.h wav.h include/libraries/Fft/Fft.h ../Stamp.h ../Limiter.h
 TOOLS = build/refft-render build/refft-check build/refft-gen
 
 all: $(TOOLS)

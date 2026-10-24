@@ -1,8 +1,8 @@
 #pragma once
-// The audio path of cpp/render.cpp, sample for sample, without the board:
+// The audio path of render.cpp, sample for sample, without the board:
 // input gains, the circular buffers and hop scheduling, the stamp itself
-// (cpp/Stamp.cpp, unchanged), overlap-add, the size-change fade, the dry/wet
-// and dry-source mix, bypass, out R gain and limiter (cpp/Limiter.cpp).
+// (Stamp.cpp, unchanged), overlap-add, the size-change fade, the dry/wet
+// and dry-source mix, bypass, out R gain and limiter (Limiter.cpp).
 //
 // The knob mappings and the mix are copied from render(), not shared with
 // it: a change there has to be made here too. Each copied block names the
